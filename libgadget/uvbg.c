@@ -14,12 +14,14 @@
 #include <math.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <bigfile-mpi.h>
 
 #include "uvbg.h"
 #include "utils.h"
 #include "allvars.h"
 #include "partmanager.h"
 #include "petapm.h"
+
 
 // TODO(smutch): This should be a parameter.
 static const int uvbg_dim = 64;
@@ -260,6 +262,28 @@ void calculate_uvbg()
     malloc_grids(&grids);
 
     populate_grids(&grids);
+
+    // DEBUG =========================================================================================
+    int this_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+    int local_nix = grids.slab_nix[this_rank];
+    int grid_size = (size_t)(local_nix * uvbg_dim * uvbg_dim);
+    float* grid = (float*)calloc(grid_size, sizeof(float));
+    for (int ii = 0; ii < local_nix; ii++)
+        for (int jj = 0; jj < uvbg_dim; jj++)
+            for (int kk = 0; kk < uvbg_dim; kk++)
+                grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = (grids.deltax)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
+
+    FILE *fout;
+    char fname[128];
+    sprintf(fname, "output/dump_r%03d.dat", this_rank);
+    if((fout = fopen(fname, "wb")) == NULL) {
+      endrun(1, "poop...");
+    }
+    fwrite(grid, sizeof(float), grid_size, fout);
+    fclose(fout);
+    free(grid);
+    // ===============================================================================================
 
     free_grids(&grids);
     walltime_measure("/UVBG/CreateGrids");
