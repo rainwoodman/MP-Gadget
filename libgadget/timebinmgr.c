@@ -107,15 +107,25 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
 
     /* Set up first and last entry to SyncPoints; TODO we can insert many more! */
 
+    // TODO(smutch): Add sync points for the UVBG calculation
     SyncPoints[0].a = TimeIC;
     SyncPoints[0].loga = log(TimeIC);
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
     SyncPoints[0].write_fof = 0;
-    SyncPoints[1].a = TimeMax;
-    SyncPoints[1].loga = log(TimeMax);
+    SyncPoints[0].calc_uvbg = 0;
+
+    SyncPoints[1].a = 0.0909;  // TODO(smutch): remove test sync point
+    SyncPoints[1].loga = log(0.0909);
     SyncPoints[1].write_snapshot = 1;
     SyncPoints[1].write_fof = 0;
-    NSyncPoints = 2;
+    SyncPoints[1].calc_uvbg = 1;
+
+    SyncPoints[2].a = All.TimeMax;
+    SyncPoints[2].loga = log(All.TimeMax);
+    SyncPoints[2].write_snapshot = 1;
+    SyncPoints[2].write_fof = 0;
+    SyncPoints[2].calc_uvbg = 1;
+    NSyncPoints = 3;
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
     for(i = 0; i < Sync.OutputListLength; i ++) {
@@ -153,6 +163,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         } else {
             SyncPoints[j].write_snapshot = 0;
             SyncPoints[j].write_fof = 0;
+            SyncPoints[j].calc_uvbg = 0;
         }
     }
 

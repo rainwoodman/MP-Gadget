@@ -25,6 +25,7 @@ struct SyncPoint
     double loga;
     int write_snapshot;
     int write_fof;
+    int calc_uvbg;  //! Calculate the UV background
     inttime_t ti;
 };
 
