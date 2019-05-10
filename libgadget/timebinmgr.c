@@ -114,18 +114,13 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     SyncPoints[0].write_fof = 0;
     SyncPoints[0].calc_uvbg = 0;
 
-    SyncPoints[1].a = 0.0909;  // TODO(smutch): remove test sync point
-    SyncPoints[1].loga = log(0.0909);
+    SyncPoints[1].a = All.TimeMax;
+    SyncPoints[1].loga = log(All.TimeMax);
     SyncPoints[1].write_snapshot = 1;
     SyncPoints[1].write_fof = 0;
     SyncPoints[1].calc_uvbg = 1;
 
-    SyncPoints[2].a = All.TimeMax;
-    SyncPoints[2].loga = log(All.TimeMax);
-    SyncPoints[2].write_snapshot = 1;
-    SyncPoints[2].write_fof = 0;
-    SyncPoints[2].calc_uvbg = 1;
-    NSyncPoints = 3;
+    NSyncPoints = 2;
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
     for(i = 0; i < Sync.OutputListLength; i ++) {
