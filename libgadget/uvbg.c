@@ -28,7 +28,7 @@ static const int uvbg_dim = 64;
 
 static void assign_slabs(UVBGgrids *grids)
 {
-    message(0, "Assigning slabs to MPI cores...");
+    message(0, "Assigning slabs to MPI cores...\n");
 
     // Allocations made in this function are free'd in `free_reionization_grids`.
     fftwf_mpi_init();
@@ -199,8 +199,12 @@ static void populate_grids(UVBGgrids *grids)
     // through all particles again n_slab times!
     double box_size = All.BoxSize;
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
-        ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim);
-        P[ii].RegionInd = searchsorted(&ix, slab_ix_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
+        if((!P[ii].IsGarbage) && (!P[ii].Swallowed) && (P[ii].Type < 5)) {
+            ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim);
+            P[ii].RegionInd = searchsorted(&ix, slab_ix_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
+        } else {
+            P[ii].RegionInd = -1;
+        }
     }
 
 
@@ -217,9 +221,9 @@ static void populate_grids(UVBGgrids *grids)
             buffer[ii] = (float)0.;
 
         // fill the local buffer for this slab
+        unsigned int count = 0;
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
-            if(P[ii].RegionInd == i_r)
-            {
+            if(P[ii].RegionInd == i_r) {
                 int ix = (int)(pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - slab_ix_start[i_r]);
                 int iy = pos_to_ngp(P[ii].Pos[1], box_size, uvbg_dim);
                 int iz = pos_to_ngp(P[ii].Pos[2], box_size, uvbg_dim);
@@ -227,8 +231,11 @@ static void populate_grids(UVBGgrids *grids)
                 int ind = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
 
                 buffer[ind] += P[ii].Mass;
+                count++;
             }
         }
+
+        message(0, "Added %d particles to grid.\n", count);
 
         // reduce on to the correct rank
         if (this_rank == i_r)
@@ -254,8 +261,7 @@ static void populate_grids(UVBGgrids *grids)
 
 void calculate_uvbg()
 {
-    walltime_measure("/Misc");
-    message(0, "Creating grids...\n");
+    message(0, "Creating UVBG grids.\n");
 
     UVBGgrids grids;
     assign_slabs(&grids);
@@ -286,6 +292,6 @@ void calculate_uvbg()
     // ===============================================================================================
 
     free_grids(&grids);
-    walltime_measure("/UVBG/CreateGrids");
 
+    walltime_measure("/UVBG/CreateGrids");
 }
