@@ -13,6 +13,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <execinfo.h>
+#include <signal.h>
 
 /* obtain a stacktrace with exec/fork. this is signal handler safe.
  * function based on xorg_backtrace_pstack; extracted from  xorg-server/os/backtrace.c

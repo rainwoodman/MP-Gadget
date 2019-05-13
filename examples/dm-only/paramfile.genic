@@ -1,7 +1,7 @@
 OutputDir = output    # Directory for output
 FileBase = IC              # Base-filename of output files
 
-Ngrid = 128
+Ngrid = 64
 
 BoxSize = 500000.0   # Periodic box size of simulation
 

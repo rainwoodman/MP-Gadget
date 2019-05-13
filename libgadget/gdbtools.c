@@ -66,7 +66,7 @@ char * GDB_format_particle(int i) {
         n = 4096 - strlen(buf)
 
     add("P[%d]: ", i);
-    add("ID : %ld ", P[i].ID);
+    add("ID : %llu ", P[i].ID);
     add("Generation: %d ", (int) P[i].Generation);
     add("Mass : %g ", P[i].Mass);
     add("Pos: %g %g %g ", P[i].Pos[0], P[i].Pos[1], P[i].Pos[2]);

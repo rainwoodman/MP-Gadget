@@ -3,6 +3,9 @@ InitCondFile = output/IC
 OutputDir = output
 OutputList = 0.02,0.1,0.15,0.2,0.33333,0.5,1.0
 
+# Mesh size (in general should be set to 2xNgrid in IC)
+Nmesh = 128 
+
 # CPU time -limit
 TimeLimitCPU = 43000 #= 8 hours
 

@@ -1,3 +1,6 @@
+#ifndef UVBG_H
+#define UVBG_H
+
 #include <fftw3.h>
 
 typedef struct UVBGgrids {
@@ -7,10 +10,12 @@ typedef struct UVBGgrids {
 
     float *deltax;
     fftwf_complex *deltax_filtered;
-    // float *uvphot;
-    // fftwf_complex *uvphot_filtered;
-    // float *xHI;
-    // float *J21;
+    float *uvphot;
+    fftwf_complex *uvphot_filtered;
+    float *xHI;
+    float *J21;
 } UVBGgrids;
 
 void calculate_uvbg();
+
+#endif
