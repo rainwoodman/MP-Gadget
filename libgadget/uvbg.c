@@ -19,13 +19,17 @@
 #include <bigfile-mpi.h>
 #include <complex.h>
 #include <fftw3.h>
+#include <stdbool.h>
 
 #include "uvbg.h"
 #include "utils.h"
 #include "allvars.h"
 #include "partmanager.h"
 #include "petapm.h"
+#include "physconst.h"
 
+// TODO(smutch): See if something equivalent is defined anywhere else
+#define FLOAT_REL_TOL (float)1e-5
 
 // TODO(smutch): This should be a parameter.
 static const int uvbg_dim = 64;
@@ -74,6 +78,17 @@ static void malloc_grids(UVBGgrids *grids)
     grids->uvphot_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
     grids->xHI = fftwf_alloc_real((size_t)slab_n_real);
     grids->J21 = fftwf_alloc_real((size_t)slab_n_real);
+    grids->z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
+    grids->J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
+
+    // Init grids for which values persist for the entire simulation
+    for(ptrdiff_t ii=0; ii < slab_n_real; ++ii) {
+        grids->z_at_ionization[ii] = -999.;
+        grids->J21_at_ionization[ii] = -999.;
+    }
+
+    grids->volume_weighted_global_xHI = 1.0;
+    grids->mass_weighted_global_xHI = 1.0;
 }
 
 static void free_grids(UVBGgrids *grids)
@@ -82,6 +97,8 @@ static void free_grids(UVBGgrids *grids)
     free(grids->slab_ix_start);
     free(grids->slab_nix);
 
+    fftwf_free(grids->J21_at_ionization);
+    fftwf_free(grids->z_at_ionization);
     fftwf_free(grids->J21);
     fftwf_free(grids->xHI);
     fftwf_free(grids->uvphot_filtered);
@@ -274,7 +291,7 @@ static void populate_grids(UVBGgrids *grids)
 }
 
 
-static void filter(fftwf_complex* box, int local_ix_start, int slab_nx, int grid_dim, float R)
+static void filter(fftwf_complex* box, const int local_ix_start, const int slab_nx, const int grid_dim, const float R)
 {
     const int filter_type = 0;  // TODO(smutch): Make this an option
     int middle = grid_dim / 2;
@@ -361,10 +378,14 @@ static void create_plans(UVBGgrids *grids)
     grids->plan_dft_r2c = fftwf_mpi_plan_dft_r2c_3d(uvbg_dim, uvbg_dim, uvbg_dim,
             grids->deltax, (fftwf_complex*)grids->deltax,
             MPI_COMM_WORLD, FFTW_PATIENT);
+    grids->plan_dft_c2r = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim,
+            (fftwf_complex*)grids->deltax, grids->deltax,
+            MPI_COMM_WORLD, FFTW_PATIENT);
 }
 
 static void destroy_plans(UVBGgrids *grids)
 {
+    fftwf_destroy_plan(grids->plan_dft_c2r);
     fftwf_destroy_plan(grids->plan_dft_r2c);
 }
 
@@ -375,15 +396,15 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
     // TODO(smutch): TAKE A VERY VERY CLOSE LOOK AT UNITS!!!!
 
+    int this_rank = -1;
+    MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+
     double box_size = All.BoxSize; // Mpc/h
     double pixel_volume = pow(box_size / (double)uvbg_dim, 3); // (Mpc/h)^3
     double cell_length_factor = 0.620350491;
     double total_n_cells = pow((double)uvbg_dim, 3);
-    int local_nix = (int)(grids->slab_nix[run_globals.mpi_rank]);
+    int local_nix = (int)(grids->slab_nix[this_rank]);
     int slab_n_real = local_nix * uvbg_dim * uvbg_dim;
-    double ReionNionPhotPerBary = 4000.;  // TODO(smutch): replace this!
-    float J21_aux = 0;
-    double J21_aux_constant = 0;
     double density_over_mean = 0;
     double sfr_density = 0;
     double f_coll_stars = 0;
@@ -409,19 +430,17 @@ static void find_HII_bubbles(UVBGgrids *grids)
     fftwf_complex* deltax_filtered = grids->deltax_filtered;
     fftwf_execute_dft_r2c(grids->plan_dft_r2c, deltax, deltax_unfiltered);
 
-    float* uvphot = grids.uvphot;
+    float* uvphot = grids->uvphot;
     fftwf_complex* uvphot_unfiltered = (fftwf_complex*)uvphot; // WATCH OUT!
     fftwf_complex* uvphot_filtered = grids->uvphot_filtered;
     fftwf_execute_dft_r2c(grids->plan_dft_r2c, uvphot, uvphot_unfiltered);
 
     // Remember to add the factor of VOLUME/TOT_NUM_PIXELS when converting from real space to k-space
     // Note: we will leave off factor of VOLUME, in anticipation of the inverse FFT below
-    int this_rank = -1;
-    MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    int slab_n_complex = (int)(grids->slab_n_complex[run_globals.mpi_rank]);
+    int slab_n_complex = (int)(grids->slab_n_complex[this_rank]);
     for (int ii = 0; ii < slab_n_complex; ii++) {
         deltax_unfiltered[ii] /= total_n_cells;
-        stars_unfiltered[ii] /= total_n_cells;
+        uvphot_unfiltered[ii] /= total_n_cells;
     }
 
     // Loop through filter radii
@@ -430,11 +449,10 @@ static void find_HII_bubbles(UVBGgrids *grids)
     double ReionRBubbleMin = 0.4068; // Mpc/h
     double R = fmin(ReionRBubbleMax, cell_length_factor * box_size); // Mpc/h
     double ReionDeltaRFactor = 1.1;
-    double ReionGammaHaloBias = 2.0;
+    float ReionGammaHaloBias = 2.0f;
 
     bool flag_last_filter_step = false;
 
-    // TODO(smutch): Cont here!
     while (!flag_last_filter_step) {
         // check to see if this is our last filtering step
         if (((R / ReionDeltaRFactor) <= (cell_length_factor * box_size / (double)uvbg_dim))
@@ -443,103 +461,41 @@ static void find_HII_bubbles(UVBGgrids *grids)
             R = cell_length_factor * box_size / (double)uvbg_dim;
         }
 
-        // DEBUG
-        // mlog("R = %.2e (h=0.678 -> %.2e)", MLOG_MESG, R, R/0.678);
-        mlog(".", MLOG_CONT);
-
         // copy the k-space grids
         memcpy(deltax_filtered, deltax_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-        memcpy(stars_filtered, stars_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-        memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+        memcpy(uvphot_filtered, uvphot_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
 
         // do the filtering unless this is the last filter step
-        int local_ix_start = (int)(run_globals.reion_grids.slab_ix_start[run_globals.mpi_rank]);
+        int local_ix_start = (int)(grids->slab_ix_start[this_rank]);
         if (!flag_last_filter_step) {
             filter(deltax_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
-            filter(stars_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
-            filter(sfr_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
+            filter(uvphot_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
         }
 
         // inverse fourier transform back to real space
-        plan = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim, deltax_filtered, (float*)deltax_filtered, run_globals.mpi_comm, FFTW_ESTIMATE);
-        fftwf_execute(plan);
-        fftwf_destroy_plan(plan);
-
-        plan = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim, stars_filtered, (float*)stars_filtered, run_globals.mpi_comm, FFTW_ESTIMATE);
-        fftwf_execute(plan);
-        fftwf_destroy_plan(plan);
-
-        plan = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim, sfr_filtered, (float*)sfr_filtered, run_globals.mpi_comm, FFTW_ESTIMATE);
-        fftwf_execute(plan);
-        fftwf_destroy_plan(plan);
+        fftwf_execute_dft_c2r(grids->plan_dft_c2r, deltax_filtered, (float*)deltax_filtered);
+        fftwf_execute_dft_c2r(grids->plan_dft_c2r, uvphot_filtered, (float*)uvphot_filtered);
 
         // Perform sanity checks to account for aliasing effects
         for (int ix = 0; ix < local_nix; ix++)
             for (int iy = 0; iy < uvbg_dim; iy++)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
-                    ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + REL_TOL);
-                    ((float*)stars_filtered)[i_padded] = fmaxf(((float*)stars_filtered)[i_padded], 0.0);
-                    ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], 0.0);
+                    ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
+                    ((float*)uvphot_filtered)[i_padded] = fmaxf(((float*)uvphot_filtered)[i_padded], 0.0);
                 }
 
-        // #ifdef DEBUG
-        //   {
-        //     char fname_debug[STRLEN];
-        //     sprintf(fname_debug, "post_stars-%d_R%.3f.dat", run_globals.mpi_rank, R);
-        //     FILE *fd_debug = fopen(fname_debug, "wb");
-        //     for(int ix = 0; ix < run_globals.reion_grids.slab_nix[run_globals.mpi_rank]; ix++)
-        //       for(int iy = 0; iy < uvbg_dim; iy++)
-        //         for(int iz = 0; iz < uvbg_dim; iz++)
-        //           fwrite(&(run_globals.reion_grids.stars_filtered[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)]), sizeof(float), 1, fd_debug);
-        //     fclose(fd_debug);
-        //   }
-        //   {
-        //     char fname_debug[STRLEN];
-        //     sprintf(fname_debug, "post_sfr-%d_R%.3f.dat", run_globals.mpi_rank, R);
-        //     FILE *fd_debug = fopen(fname_debug, "wb");
-        //     for(int ix = 0; ix < run_globals.reion_grids.slab_nix[run_globals.mpi_rank]; ix++)
-        //       for(int iy = 0; iy < uvbg_dim; iy++)
-        //         for(int iz = 0; iz < uvbg_dim; iz++)
-        //           fwrite(&(run_globals.reion_grids.sfr_filtered[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)]), sizeof(float), 1, fd_debug);
-        //     fclose(fd_debug);
-        //   }
-        // #endif
 
-        /*
-     * Main loop through the box...
-     */
+        // TODO(smutch): Make this a parameter
+        const double alpha_uv = 3;  // UV spectral slope
+        const double ReionNionPhotPerBary = 4000.;  // TODO(smutch): replace this!
 
-        J21_aux_constant = (1.0 + redshift) * (1.0 + redshift) / (4.0 * M_PI)
-            * run_globals.params.physics.ReionAlphaUV * PLANCK
-            * 1e21 // * run_globals.params.physics.ReionEscapeFrac
-            * R * units->UnitLength_in_cm * ReionNionPhotPerBary / PROTONMASS
-            * units->UnitMass_in_g / pow(units->UnitLength_in_cm, 3) / units->UnitTime_in_s;
+        const double J21_aux_constant = (1.0 + redshift) * (1.0 + redshift) / (4.0 * M_PI)
+            * alpha_uv * PLANCK * 1e21
+            * R * All.UnitLength_in_cm * ReionNionPhotPerBary / PROTONMASS
+            * All.UnitMass_in_g / pow(All.UnitLength_in_cm, 3) / All.UnitTime_in_s;
 
-        // DEBUG
-        // for (int ix=0; ix<local_nix; ix++)
-        //   for (int iy=0; iy<uvbg_dim; iy++)
-        //     for (int iz=0; iz<uvbg_dim; iz++)
-        //       if (((float *)sfr_filtered)[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] > 0)
-        //       {
-        //         mlog("J21_aux ==========", MLOG_OPEN);
-        //         mlog("redshift = %.2f", MLOG_MESG, redshift);
-        //         mlog("alpha = %.2e", MLOG_MESG, run_globals.params.physics.ReionAlphaUV);
-        //         mlog("PLANCK = %.2e", MLOG_MESG, PLANCK);
-        //         mlog("ReionEscapeFrac = %.2f", MLOG_MESG, ReionEscapeFrac);
-        //         mlog("ReionNionPhotPerBary = %.1f", MLOG_MESG, ReionNionPhotPerBary);
-        //         mlog("UnitMass_in_g = %.2e", MLOG_MESG, units->UnitMass_in_g);
-        //         mlog("UnitLength_in_cm = %.2e", MLOG_MESG, units->UnitLength_in_cm);
-        //         mlog("PROTONMASS = %.2e", MLOG_MESG, PROTONMASS);
-        //         mlog("-> J21_aux_constant = %.2e", MLOG_MESG, J21_aux_constant);
-        //         mlog("pixel_volume = %.2e", MLOG_MESG, pixel_volume);
-        //         mlog("sfr_density[%d, %d, %d] = %.2e", MLOG_MESG, ((float *)sfr_filtered)[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] / pixel_volume);
-        //         mlog("-> J21_aux = %.2e", MLOG_MESG, ((float *)sfr_filtered)[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] / pixel_volume * J21_aux_constant);
-        //         mlog("==========", MLOG_CLOSE);
-        //         if (run_globals.mpi_rank == 0)
-        //           ABORT(EXIT_SUCCESS);
-        //       }
-
+        // Main loop through the box...
         for (int ix = 0; ix < local_nix; ix++)
             for (int iy = 0; iy < uvbg_dim; iy++)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -548,52 +504,43 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
                     density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
 
-                    f_coll_stars = (double)((float*)stars_filtered)[i_padded] / (RtoM(R) * density_over_mean)
+                    f_coll_stars = (double)((float*)uvphot_filtered)[i_padded] / (RtoM(R) * density_over_mean)
                         * (4.0 / 3.0) * M_PI * pow(R, 3.0) / pixel_volume;
 
-                    sfr_density = (double)((float*)sfr_filtered)[i_padded] / pixel_volume; // In internal units
+                    // TODO(smutch): This needs to be calculated in some way. I reckon we keep the stellar mass grid alive and do a difference.
+                    const float sfr_filtered = 1.0f;  // TODO(smutch): This is a dummy placeholder
+                    sfr_density = (double)(sfr_filtered) / pixel_volume; // In internal units
 
-                    // #ifdef DEBUG
-                    //           if(abs(redshift - 23.074) < 0.01)
-                    //             debug("%d, %d, %d, %d, %g, %g, %g, %g, %g, %g, %g, %g, %g, %g, %g\n",
-                    //                 run_globals.mpi_rank, ix, iy, iz,
-                    //                 R, density_over_mean, f_coll_stars,
-                    //                 ((float *)stars_filtered)[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)],
-                    //                 RtoM(R), (4.0/3.0)*M_PI*pow(R,3.0), pixel_volume, 1.0/ReionEfficiency, sfr_density, ((float*)sfr_filtered)[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)], (float)(sfr_density * J21_aux_constant));
-                    // #endif
-
-                    if (flag_ReionUVBFlag)
-                        J21_aux = (float)(sfr_density * J21_aux_constant);
+                    const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
                     // Check if ionised!
                     if (f_coll_stars > 1.0 / ReionEfficiency) // IONISED!!!!
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
-                        if (xH[i_real] > REL_TOL)
+                        if (xHI[i_real] > FLOAT_REL_TOL)
                             if (flag_ReionUVBFlag)
                                 J21[i_real] = J21_aux;
 
                         // Mark as ionised
-                        xH[i_real] = 0;
+                        xHI[i_real] = 0;
 
-                        // Record radius
-                        r_bubble[i_real] = (float)R;
+                        // TODO(smutch): Do we want to implement this?
+                        // r_bubble[i_real] = (float)R;
                     }
-                    // Check if this is the last filtering step.
-                    // If so, assign partial ionisations to those cells which aren't fully ionised
-                    else if (flag_last_filter_step && (xH[i_real] > REL_TOL))
-                        xH[i_real] = (float)(1.0 - f_coll_stars * ReionEfficiency);
+                    else if (flag_last_filter_step && (xHI[i_real] > FLOAT_REL_TOL)) {
+                        // Check if this is the last filtering step.
+                        // If so, assign partial ionisations to those cells which aren't fully ionised
+                        xHI[i_real] = (float)(1.0 - f_coll_stars * ReionEfficiency);
+                    }
 
                     // Check if new ionisation
-                    float* z_in = run_globals.reion_grids.z_at_ionization;
-                    if ((xH[i_real] < REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
+                    float* z_in = grids->z_at_ionization;
+                    if ((xHI[i_real] < FLOAT_REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
                     {
                         z_in[i_real] = (float)redshift;
-                        if (flag_ReionUVBFlag)
-                            run_globals.reion_grids.J21_at_ionization[i_real] = J21_aux * (float)ReionGammaHaloBias;
+                        grids->J21_at_ionization[i_real] = J21_aux * ReionGammaHaloBias;
                     }
-                }
-        // iz
+                } // iz
 
         R /= ReionDeltaRFactor;
     }
@@ -601,8 +548,8 @@ static void find_HII_bubbles(UVBGgrids *grids)
     // Find the volume and mass weighted neutral fractions
     // TODO: The deltax grid will have rounding errors from forward and reverse
     //       FFT. Should cache deltax slabs prior to ffts and reuse here.
-    double volume_weighted_global_xH = 0.0;
-    double mass_weighted_global_xH = 0.0;
+    double volume_weighted_global_xHI = 0.0;
+    double mass_weighted_global_xHI = 0.0;
     double mass_weight = 0.0;
 
     for (int ix = 0; ix < local_nix; ix++)
@@ -610,20 +557,20 @@ static void find_HII_bubbles(UVBGgrids *grids)
             for (int iz = 0; iz < uvbg_dim; iz++) {
                 i_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
                 i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
-                volume_weighted_global_xH += (double)xH[i_real];
+                volume_weighted_global_xHI += (double)xHI[i_real];
                 density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
-                mass_weighted_global_xH += (double)(xH[i_real]) * density_over_mean;
+                mass_weighted_global_xHI += (double)(xH[i_real]) * density_over_mean;
                 mass_weight += density_over_mean;
             }
 
-    MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-    MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xH, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
 
-    volume_weighted_global_xH /= total_n_cells;
-    mass_weighted_global_xH /= mass_weight;
-    run_globals.reion_grids.volume_weighted_global_xH = volume_weighted_global_xH;
-    run_globals.reion_grids.mass_weighted_global_xH = mass_weighted_global_xH;
+    volume_weighted_global_xHI /= total_n_cells;
+    mass_weighted_global_xHI /= mass_weight;
+    grids->volume_weighted_global_xHI = (float)volume_weighted_global_xHI;
+    grids->mass_weighted_global_xHI = (float)mass_weighted_global_xHI;
     
 }
 
@@ -659,6 +606,12 @@ void calculate_uvbg()
     fclose(fout);
     free(grid);
     // ===============================================================================================
+
+    create_plans(&grids);
+
+    find_HII_bubbles(&grids);
+
+    destroy_plans(&grids);
 
     free_grids(&grids);
 

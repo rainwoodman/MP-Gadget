@@ -14,6 +14,14 @@ typedef struct UVBGgrids {
     fftwf_complex *uvphot_filtered;
     float *xHI;
     float *J21;
+    float *z_at_ionization;
+    float *J21_at_ionization;
+
+    fftwf_plan plan_dft_r2c;
+    fftwf_plan plan_dft_c2r;
+
+    float volume_weighted_global_xHI;
+    float mass_weighted_global_xHI;
 } UVBGgrids;
 
 void calculate_uvbg();
