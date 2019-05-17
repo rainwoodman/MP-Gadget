@@ -280,6 +280,12 @@ static void populate_grids(UVBGgrids *grids)
         if (this_rank == i_r) {
             const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
             const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
+            message(0, "deltax_conv_factor = %g\n", deltax_conv_factor);
+            message(0, "rho_crit = %g\n", All.CP.RhoCrit);
+            message(0, "Omega0 = %g\n", All.CP.Omega0);
+            message(0, "BoxSize = %g\n", All.BoxSize);
+            message(0, "Hubble = %g\n", All.CP.Hubble);
+            message(0, "GRAVITY = %g\n", GRAVITY);
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
                 for (int iy = 0; iy < uvbg_dim; iy++)
                     for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -429,8 +435,8 @@ static void find_HII_bubbles(UVBGgrids *grids)
     float* J21 = grids->J21;
     float* xHI = grids->xHI;
     for (int ii = 0; ii < slab_n_real; ii++) {
-        J21[ii] = 0.0;
-        xHI[ii] = (float)1.0;
+        J21[ii] = 0.0f;
+        xHI[ii] = 1.0f;
     }
 
     // Forward fourier transform to obtain k-space fields
@@ -500,7 +506,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
-                    ((float*)uvphot_filtered)[i_padded] = fmaxf(((float*)uvphot_filtered)[i_padded], 0.0);
+                    ((float*)uvphot_filtered)[i_padded] = fmaxf(((float*)uvphot_filtered)[i_padded], 0.0f);
                 }
 
 
@@ -513,28 +519,37 @@ static void find_HII_bubbles(UVBGgrids *grids)
             for (int ii = 0; ii < local_nix; ii++)
                 for (int jj = 0; jj < uvbg_dim; jj++)
                     for (int kk = 0; kk < uvbg_dim; kk++) {
-                        grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = deltax_filtered[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)] * 1e10;
+                        grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = ((float*)deltax_filtered)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
                         if (grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] > 0)
                             count_gtz++;
                     }
 
             message(0, "count_gtz for filter R=%.2f = %d\n", R, count_gtz);
 
+            // FILE *fout;
+            // char fname[128];
+            // sprintf(fname, "output/dump-filterstep-%.2f.dat", R);
+            // if((fout = fopen(fname, "wb")) == NULL) {
+                // endrun(1, "poop...");
+            // }
+            // fwrite(grid, sizeof(float), grid_size, fout);
+            // fclose(fout);
+
             BigFile fout;
             char fname[256];
-            sprintf(fname, "filterstep-%.2f.bf", R);
+            sprintf(fname, "output/filterstep-%.2f.bf", R);
             big_file_mpi_create(&fout, fname, MPI_COMM_WORLD);
             BigBlock block;
             int n_ranks;
             MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
-            big_file_mpi_create_block(&fout, &block, "deltax", "f4", 1, n_ranks, grid_size, MPI_COMM_WORLD);
-            BigBlockPtr ptr;
+            big_file_mpi_create_block(&fout, &block, "deltax", "=f4", 1, n_ranks, uvbg_dim*uvbg_dim*uvbg_dim, MPI_COMM_WORLD);
+            BigBlockPtr ptr = {0};
             int start_elem = this_rank > 1 ? grids->slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
             big_block_seek(&block, &ptr, start_elem);
-            BigArray arr;
-            big_array_init(&arr, grid, "f4", 1, (size_t[]){grid_size}, (ptrdiff_t[]){1});
+            BigArray arr = {0};
+            big_array_init(&arr, grid, "=f4", 1, (size_t[]){grid_size}, NULL);
             big_block_mpi_write(&block, &ptr, &arr, 1, MPI_COMM_WORLD);
-            big_block_mpi_flush(&block, MPI_COMM_WORLD);
+            // big_block_mpi_flush(&block, MPI_COMM_WORLD);
             big_block_mpi_close(&block, MPI_COMM_WORLD);
             big_file_mpi_close(&fout, MPI_COMM_WORLD);
 
@@ -638,6 +653,7 @@ void calculate_uvbg()
     UVBGgrids grids;
     assign_slabs(&grids);
     malloc_grids(&grids);
+    create_plans(&grids);
 
     populate_grids(&grids);
 
@@ -666,7 +682,6 @@ void calculate_uvbg()
     walltime_measure("/Misc");
     // ===============================================================================================
 
-    create_plans(&grids);
 
     message(0, "Away to call find_HII_bubbles...\n");
     find_HII_bubbles(&grids);
@@ -674,7 +689,6 @@ void calculate_uvbg()
     walltime_measure("/UVBG/find_HII_bubbles");
 
     destroy_plans(&grids);
-
     free_grids(&grids);
 
     walltime_measure("/UVBG");

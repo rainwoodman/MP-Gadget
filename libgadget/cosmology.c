@@ -6,6 +6,7 @@
 #include "cosmology.h"
 #include "physconst.h"
 #include "utils.h"
+#include "allvars.h"
 
 /*Stefan-Boltzmann constant in cgs units*/
 #define  STEFAN_BOLTZMANN 5.670373e-5
@@ -24,7 +25,8 @@ void init_cosmology(Cosmology * CP, const double TimeBegin)
     CP->OmegaCDM = CP->Omega0 - CP->OmegaBaryon;
     CP->OmegaK = 1.0 - CP->Omega0 - CP->OmegaLambda;
 
-    CP->RhoCrit = 3.0 * CP->Hubble * CP->Hubble / (8.0 * M_PI * GRAVITY);
+    const double G = GRAVITY / pow(All.UnitLength_in_cm, 3) * All.UnitMass_in_g * pow(All.UnitTime_in_s, 2);
+    CP->RhoCrit = 3.0 * CP->Hubble * CP->Hubble / (8.0 * M_PI * G);  // in internal units
 
     /* Omega_g = 4 \sigma_B T_{CMB}^4 8 \pi G / (3 c^3 H^2) */
 
