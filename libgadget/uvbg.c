@@ -240,6 +240,7 @@ static void populate_grids(UVBGgrids *grids)
         }
 
         // fill the local buffer for this slab
+        // TODO(smutch): This should become CIC
         unsigned int count_mass = 0, count_uvphot = 0;
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(P[ii].RegionInd == i_r) {
@@ -280,12 +281,6 @@ static void populate_grids(UVBGgrids *grids)
         if (this_rank == i_r) {
             const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
             const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
-            message(0, "deltax_conv_factor = %g\n", deltax_conv_factor);
-            message(0, "rho_crit = %g\n", All.CP.RhoCrit);
-            message(0, "Omega0 = %g\n", All.CP.Omega0);
-            message(0, "BoxSize = %g\n", All.BoxSize);
-            message(0, "Hubble = %g\n", All.CP.Hubble);
-            message(0, "GRAVITY = %g\n", GRAVITY);
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
                 for (int iy = 0; iy < uvbg_dim; iy++)
                     for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -297,9 +292,9 @@ static void populate_grids(UVBGgrids *grids)
         }
     }
 
-
     fftwf_free(buffer_uvphot);
     fftwf_free(buffer_mass);
+
 }
 
 
