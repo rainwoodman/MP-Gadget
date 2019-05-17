@@ -16,6 +16,7 @@
 #include <math.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <bigfile.h>
 #include <bigfile-mpi.h>
 #include <complex.h>
 #include <fftw3.h>
@@ -210,7 +211,7 @@ static void populate_grids(UVBGgrids *grids)
             buffer_size = (int)slab_nix[ii];
 
     buffer_size *= uvbg_dim * uvbg_dim;
-    float *buffer_deltax = fftwf_alloc_real((size_t)buffer_size);
+    float *buffer_mass = fftwf_alloc_real((size_t)buffer_size);
     float *buffer_uvphot = fftwf_alloc_real((size_t)buffer_size);
 
     // I am going to reuse the RegionInd member which is from petapm.  I
@@ -234,12 +235,12 @@ static void populate_grids(UVBGgrids *grids)
 
         // init the buffers
         for (int ii = 0; ii < buffer_size; ii++) {
-            buffer_deltax[ii] = (float)0.;
+            buffer_mass[ii] = (float)0.;
             buffer_uvphot[ii] = (float)0.;
         }
 
         // fill the local buffer for this slab
-        unsigned int count_deltax = 0, count_uvphot = 0;
+        unsigned int count_mass = 0, count_uvphot = 0;
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(P[ii].RegionInd == i_r) {
                 int ix = (int)(pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - slab_ix_start[i_r]);
@@ -248,8 +249,8 @@ static void populate_grids(UVBGgrids *grids)
 
                 int ind = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
 
-                buffer_deltax[ind] += P[ii].Mass;
-                count_deltax++;
+                buffer_mass[ind] += P[ii].Mass;
+                count_mass++;
 
                 if(P[ii].Type == 4) {
                     buffer_uvphot[ind] += P[ii].Mass;
@@ -259,15 +260,15 @@ static void populate_grids(UVBGgrids *grids)
             }
         }
 
-        message(0, "Added %d particles to deltax grid.\n", count_deltax);
+        message(0, "Added %d particles to mass grid.\n", count_mass);
         message(0, "Added %d particles to uvphot grid.\n", count_uvphot);
 
         // reduce on to the correct rank
         if (this_rank == i_r) {
-            MPI_Reduce(MPI_IN_PLACE, buffer_deltax, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(MPI_IN_PLACE, buffer_mass, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         }
         else
-            MPI_Reduce(buffer_deltax, buffer_deltax, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(buffer_mass, buffer_mass, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
         if (this_rank == i_r) {
             MPI_Reduce(MPI_IN_PLACE, buffer_uvphot, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
@@ -276,18 +277,23 @@ static void populate_grids(UVBGgrids *grids)
             MPI_Reduce(buffer_uvphot, buffer_uvphot, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
 
-        if (this_rank == i_r)
+        if (this_rank == i_r) {
+            const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
+            const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
                 for (int iy = 0; iy < uvbg_dim; iy++)
                     for (int iz = 0; iz < uvbg_dim; iz++) {
-                        grids->deltax[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = buffer_deltax[grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL)];
+                        // TODO(smutch): The buffer will need to be a double for precision...
+                        float mass = buffer_mass[grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL)];
+                        grids->deltax[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = mass * (float)deltax_conv_factor - 1.0f;
                         grids->uvphot[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = buffer_uvphot[grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL)];
                     }
+        }
     }
 
 
     fftwf_free(buffer_uvphot);
-    fftwf_free(buffer_deltax);
+    fftwf_free(buffer_mass);
 }
 
 
@@ -358,7 +364,7 @@ static double RtoM(double R)
     // All in internal units
     const int filter = 0;  // TODO(smutch): Make this an option
     double OmegaM = All.CP.Omega0;
-    double RhoCrit = 200.;  // TODO(smutch): This should probably be Bryan & Norman value (z dep)
+    double RhoCrit = All.CP.RhoCrit;
 
     switch (filter) {
     case 0: //top hat M = (4/3) PI <rho> R^3
@@ -395,6 +401,8 @@ static void find_HII_bubbles(UVBGgrids *grids)
      * largely rewritten. */
 
     // TODO(smutch): TAKE A VERY VERY CLOSE LOOK AT UNITS!!!!
+
+    message(0, "Calling find_HII_bubbles.\n");
 
     int this_rank = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
@@ -457,7 +465,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
     // with f_* removed and f_b added since we define f_coll as M_*/M_tot rather than M_vir/M_tot,
     // and also with the inclusion of the effects of the Helium fraction.
     const double ReionNionPhotPerBary = 4000.;
-    const double Y_He = 0.24;
+    const double Y_He = 1.0 - HYDROGEN_MASSFRAC;
     const double BaryonFrac = All.CP.OmegaBaryon / All.CP.Omega0;
     double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary / (1.0 - 0.75 * Y_He);
 
@@ -494,6 +502,45 @@ static void find_HII_bubbles(UVBGgrids *grids)
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                     ((float*)uvphot_filtered)[i_padded] = fmaxf(((float*)uvphot_filtered)[i_padded], 0.0);
                 }
+
+
+        // ============================================================================================================
+        {
+            // DEBUG HERE
+            const int grid_size = (int)(local_nix * uvbg_dim * uvbg_dim);
+            float* grid = (float*)calloc(grid_size, sizeof(float));
+            int count_gtz = 0;
+            for (int ii = 0; ii < local_nix; ii++)
+                for (int jj = 0; jj < uvbg_dim; jj++)
+                    for (int kk = 0; kk < uvbg_dim; kk++) {
+                        grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = deltax_filtered[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)] * 1e10;
+                        if (grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] > 0)
+                            count_gtz++;
+                    }
+
+            message(0, "count_gtz for filter R=%.2f = %d\n", R, count_gtz);
+
+            BigFile fout;
+            char fname[256];
+            sprintf(fname, "filterstep-%.2f.bf", R);
+            big_file_mpi_create(&fout, fname, MPI_COMM_WORLD);
+            BigBlock block;
+            int n_ranks;
+            MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+            big_file_mpi_create_block(&fout, &block, "deltax", "f4", 1, n_ranks, grid_size, MPI_COMM_WORLD);
+            BigBlockPtr ptr;
+            int start_elem = this_rank > 1 ? grids->slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
+            big_block_seek(&block, &ptr, start_elem);
+            BigArray arr;
+            big_array_init(&arr, grid, "f4", 1, (size_t[]){grid_size}, (ptrdiff_t[]){1});
+            big_block_mpi_write(&block, &ptr, &arr, 1, MPI_COMM_WORLD);
+            big_block_mpi_flush(&block, MPI_COMM_WORLD);
+            big_block_mpi_close(&block, MPI_COMM_WORLD);
+            big_file_mpi_close(&fout, MPI_COMM_WORLD);
+
+            free(grid);
+        }
+        // ============================================================================================================
 
 
         // TODO(smutch): Make this a parameter
@@ -585,13 +632,16 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
 void calculate_uvbg()
 {
-    message(0, "Creating UVBG grids.\n");
+    message(0, "Calculating UVBG grids.\n");
+    walltime_measure("/Misc");
 
     UVBGgrids grids;
     assign_slabs(&grids);
     malloc_grids(&grids);
 
     populate_grids(&grids);
+
+    walltime_measure("/UVBG/populate_grids");
 
     // DEBUG =========================================================================================
     int this_rank;
@@ -613,15 +663,19 @@ void calculate_uvbg()
     fwrite(grid, sizeof(float), grid_size, fout);
     fclose(fout);
     free(grid);
+    walltime_measure("/Misc");
     // ===============================================================================================
 
     create_plans(&grids);
 
+    message(0, "Away to call find_HII_bubbles...\n");
     find_HII_bubbles(&grids);
+
+    walltime_measure("/UVBG/find_HII_bubbles");
 
     destroy_plans(&grids);
 
     free_grids(&grids);
 
-    walltime_measure("/UVBG/CreateGrids");
+    walltime_measure("/UVBG");
 }
