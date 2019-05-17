@@ -410,6 +410,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
     double f_coll_stars = 0;
     int i_real = 0;
     int i_padded = 0;
+    const double redshift = 1.0 / (All.Time) - 1.;
 
     // This parameter choice is sensitive to noise on the cell size, at least for the typical
     // cell sizes in RT simulations. It probably doesn't matter for larger cell sizes.
@@ -451,6 +452,15 @@ static void find_HII_bubbles(UVBGgrids *grids)
     double ReionDeltaRFactor = 1.1;
     float ReionGammaHaloBias = 2.0f;
 
+    // TODO(smutch): tidy this up!
+    // The following is based on Sobacchi & Messinger (2013) eqn 7
+    // with f_* removed and f_b added since we define f_coll as M_*/M_tot rather than M_vir/M_tot,
+    // and also with the inclusion of the effects of the Helium fraction.
+    const double ReionNionPhotPerBary = 4000.;
+    const double Y_He = 0.24;
+    const double BaryonFrac = All.CP.OmegaBaryon / All.CP.Omega0;
+    double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary / (1.0 - 0.75 * Y_He);
+
     bool flag_last_filter_step = false;
 
     while (!flag_last_filter_step) {
@@ -488,7 +498,6 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
         // TODO(smutch): Make this a parameter
         const double alpha_uv = 3;  // UV spectral slope
-        const double ReionNionPhotPerBary = 4000.;  // TODO(smutch): replace this!
 
         const double J21_aux_constant = (1.0 + redshift) * (1.0 + redshift) / (4.0 * M_PI)
             * alpha_uv * PLANCK * 1e21
@@ -518,8 +527,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
                         if (xHI[i_real] > FLOAT_REL_TOL)
-                            if (flag_ReionUVBFlag)
-                                J21[i_real] = J21_aux;
+                            J21[i_real] = J21_aux;
 
                         // Mark as ionised
                         xHI[i_real] = 0;
@@ -559,13 +567,13 @@ static void find_HII_bubbles(UVBGgrids *grids)
                 i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
                 volume_weighted_global_xHI += (double)xHI[i_real];
                 density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
-                mass_weighted_global_xHI += (double)(xH[i_real]) * density_over_mean;
+                mass_weighted_global_xHI += (double)(xHI[i_real]) * density_over_mean;
                 mass_weight += density_over_mean;
             }
 
-    MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-    MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
-    MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, run_globals.mpi_comm);
+    MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
     volume_weighted_global_xHI /= total_n_cells;
     mass_weighted_global_xHI /= mass_weight;
