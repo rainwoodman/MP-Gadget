@@ -84,12 +84,12 @@ static void malloc_grids(UVBGgrids *grids)
 
     // Init grids for which values persist for the entire simulation
     for(ptrdiff_t ii=0; ii < slab_n_real; ++ii) {
-        grids->z_at_ionization[ii] = -999.;
-        grids->J21_at_ionization[ii] = -999.;
+        grids->z_at_ionization[ii] = -999f;
+        grids->J21_at_ionization[ii] = -999f;
     }
 
-    grids->volume_weighted_global_xHI = 1.0;
-    grids->mass_weighted_global_xHI = 1.0;
+    grids->volume_weighted_global_xHI = 1.0f;
+    grids->mass_weighted_global_xHI = 1.0f;
 }
 
 static void free_grids(UVBGgrids *grids)
@@ -506,50 +506,40 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
 
         // ============================================================================================================
-        {
-            // DEBUG HERE
-            const int grid_size = (int)(local_nix * uvbg_dim * uvbg_dim);
-            float* grid = (float*)calloc(grid_size, sizeof(float));
-            int count_gtz = 0;
-            for (int ii = 0; ii < local_nix; ii++)
-                for (int jj = 0; jj < uvbg_dim; jj++)
-                    for (int kk = 0; kk < uvbg_dim; kk++) {
-                        grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = ((float*)deltax_filtered)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
-                        if (grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] > 0)
-                            count_gtz++;
-                    }
+        // {
+        //     // DEBUG HERE
+        //     const int grid_size = (int)(local_nix * uvbg_dim * uvbg_dim);
+        //     float* grid = (float*)calloc(grid_size, sizeof(float));
+        //     int count_gtz = 0;
+        //     for (int ii = 0; ii < local_nix; ii++)
+        //         for (int jj = 0; jj < uvbg_dim; jj++)
+        //             for (int kk = 0; kk < uvbg_dim; kk++) {
+        //                 grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = ((float*)deltax_filtered)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
+        //                 if (grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] > 0)
+        //                     count_gtz++;
+        //             }
 
-            message(0, "count_gtz for filter R=%.2f = %d\n", R, count_gtz);
+        //     message(0, "count_gtz for filter R=%.2f = %d\n", R, count_gtz);
 
-            // FILE *fout;
-            // char fname[128];
-            // sprintf(fname, "output/dump-filterstep-%.2f.dat", R);
-            // if((fout = fopen(fname, "wb")) == NULL) {
-                // endrun(1, "poop...");
-            // }
-            // fwrite(grid, sizeof(float), grid_size, fout);
-            // fclose(fout);
+        //     BigFile fout;
+        //     char fname[256];
+        //     sprintf(fname, "output/filterstep-%.2f.bf", R);
+        //     big_file_mpi_create(&fout, fname, MPI_COMM_WORLD);
+        //     BigBlock block;
+        //     int n_ranks;
+        //     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+        //     big_file_mpi_create_block(&fout, &block, "deltax", "=f4", 1, n_ranks, uvbg_dim*uvbg_dim*uvbg_dim, MPI_COMM_WORLD);
+        //     BigBlockPtr ptr = {0};
+        //     int start_elem = this_rank > 1 ? grids->slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
+        //     big_block_seek(&block, &ptr, start_elem);
+        //     BigArray arr = {0};
+        //     big_array_init(&arr, grid, "=f4", 1, (size_t[]){grid_size}, NULL);
+        //     big_block_mpi_write(&block, &ptr, &arr, 1, MPI_COMM_WORLD);
+        //     big_block_mpi_close(&block, MPI_COMM_WORLD);
+        //     big_file_mpi_close(&fout, MPI_COMM_WORLD);
 
-            BigFile fout;
-            char fname[256];
-            sprintf(fname, "output/filterstep-%.2f.bf", R);
-            big_file_mpi_create(&fout, fname, MPI_COMM_WORLD);
-            BigBlock block;
-            int n_ranks;
-            MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
-            big_file_mpi_create_block(&fout, &block, "deltax", "=f4", 1, n_ranks, uvbg_dim*uvbg_dim*uvbg_dim, MPI_COMM_WORLD);
-            BigBlockPtr ptr = {0};
-            int start_elem = this_rank > 1 ? grids->slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
-            big_block_seek(&block, &ptr, start_elem);
-            BigArray arr = {0};
-            big_array_init(&arr, grid, "=f4", 1, (size_t[]){grid_size}, NULL);
-            big_block_mpi_write(&block, &ptr, &arr, 1, MPI_COMM_WORLD);
-            // big_block_mpi_flush(&block, MPI_COMM_WORLD);
-            big_block_mpi_close(&block, MPI_COMM_WORLD);
-            big_file_mpi_close(&fout, MPI_COMM_WORLD);
-
-            free(grid);
-        }
+        //     free(grid);
+        // }
         // ============================================================================================================
 
 
@@ -642,16 +632,17 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
 void calculate_uvbg()
 {
-    message(0, "Calculating UVBG grids.\n");
     walltime_measure("/Misc");
+    message(0, "Calculating UVBG grids.\n");
 
     UVBGgrids grids;
     assign_slabs(&grids);
     malloc_grids(&grids);
+    
     create_plans(&grids);
+    walltime_measure("/UVBG/create_plans");
 
     populate_grids(&grids);
-
     walltime_measure("/UVBG/populate_grids");
 
     // DEBUG =========================================================================================
