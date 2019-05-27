@@ -31,6 +31,7 @@
 /*Only for the star slot reservation*/
 #include "forcetree.h"
 #include "domain.h"
+#include "uvbg.h"
 
 /*Parameters of the star formation model*/
 static struct SFRParams
@@ -534,6 +535,11 @@ static int make_particle_star(int child, int parent, int placement)
     int j;
     for(j = 0; j < NMETALS; j++)
         STARP(child).Metals[j] = oldslot.Metals[j];
+
+    // Add this to the gross stellar mass grid
+    UVBGgrids.stars[0]++;
+    // TODO(smutch): THIS!!!!
+
     return retflag;
 }
 

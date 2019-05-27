@@ -35,7 +35,9 @@
 // TODO(smutch): This should be a parameter.
 static const int uvbg_dim = 64;
 
-static void assign_slabs(UVBGgrids *grids)
+struct UVBGgrids_type UVBGgrids;
+
+static void assign_slabs()
 {
     message(0, "Assigning slabs to MPI cores...\n");
 
@@ -52,63 +54,74 @@ static void assign_slabs(UVBGgrids *grids)
 
     // let every rank know...
     ptrdiff_t* slab_nix = malloc(sizeof(ptrdiff_t) * n_ranks); ///< array of number of x cells of every rank
-    grids->slab_nix = slab_nix;
+    UVBGgrids.slab_nix = slab_nix;
     MPI_Allgather(&local_nix, sizeof(ptrdiff_t), MPI_BYTE, slab_nix, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
 
     ptrdiff_t *slab_ix_start = malloc(sizeof(ptrdiff_t) * n_ranks); ///< array first x cell of every rank
-    grids->slab_ix_start = slab_ix_start;
+    UVBGgrids.slab_ix_start = slab_ix_start;
     slab_ix_start[0] = 0;
     for (int ii = 1; ii < n_ranks; ii++)
         slab_ix_start[ii] = slab_ix_start[ii - 1] + slab_nix[ii - 1];
 
     ptrdiff_t *slab_n_complex = malloc(sizeof(ptrdiff_t) * n_ranks); ///< array of allocation counts for every rank
-    grids->slab_n_complex = slab_n_complex;
+    UVBGgrids.slab_n_complex = slab_n_complex;
     MPI_Allgather(&local_n_complex, sizeof(ptrdiff_t), MPI_BYTE, slab_n_complex, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
 }
 
-static void malloc_grids(UVBGgrids *grids)
+void malloc_permanent_uvbg_grids()
+{
+    size_t grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+
+    // Note that these are full grids stored on every rank!
+    UVBGgrids.J21 = mymalloc("J21", grid_n_real);
+    UVBGgrids.stars = mymalloc("stars", grid_n_real);
+}
+
+void free_permanent_uvbg_grids()
+{
+    myfree(UVBGgrids.stars);
+    myfree(UVBGgrids.J21);
+}
+
+static void malloc_grids()
 {
     int this_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    ptrdiff_t slab_n_complex = grids->slab_n_complex[this_rank];
-    ptrdiff_t slab_n_real = grids->slab_nix[this_rank] * uvbg_dim * uvbg_dim;
+    ptrdiff_t slab_n_complex = UVBGgrids.slab_n_complex[this_rank];
+    ptrdiff_t slab_n_real = UVBGgrids.slab_nix[this_rank] * uvbg_dim * uvbg_dim;
     
-    // Note that this is a full grid stored on every rank!
-    grids->J21 = fftwf_alloc_real((size_t)uvbg_dim * (size_t)uvbg_dim * (size_t)uvbg_dim);
-
-    grids->deltax = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
-    grids->deltax_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
-    grids->uvphot = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
-    grids->uvphot_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
-    grids->xHI = fftwf_alloc_real((size_t)slab_n_real);
-    grids->z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
-    grids->J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
+    UVBGgrids.deltax = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
+    UVBGgrids.deltax_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
+    UVBGgrids.stars_slab = fftwf_alloc_complex((size_t)(slab_n_complex));
+    UVBGgrids.stars_slab_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
+    UVBGgrids.xHI = fftwf_alloc_real((size_t)slab_n_real);
+    UVBGgrids.z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
+    UVBGgrids.J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
 
     // Init grids for which values persist for the entire simulation
     for(ptrdiff_t ii=0; ii < slab_n_real; ++ii) {
-        grids->z_at_ionization[ii] = -999.0f;
-        grids->J21_at_ionization[ii] = -999.0f;
+        UVBGgrids.z_at_ionization[ii] = -999.0f;
+        UVBGgrids.J21_at_ionization[ii] = -999.0f;
     }
 
-    grids->volume_weighted_global_xHI = 1.0f;
-    grids->mass_weighted_global_xHI = 1.0f;
+    UVBGgrids.volume_weighted_global_xHI = 1.0f;
+    UVBGgrids.mass_weighted_global_xHI = 1.0f;
 }
 
-static void free_grids(UVBGgrids *grids)
+static void free_grids()
 {
-    free(grids->slab_n_complex);
-    free(grids->slab_ix_start);
-    free(grids->slab_nix);
+    free(UVBGgrids.slab_n_complex);
+    free(UVBGgrids.slab_ix_start);
+    free(UVBGgrids.slab_nix);
 
-    fftwf_free(grids->J21);
 
-    fftwf_free(grids->J21_at_ionization);
-    fftwf_free(grids->z_at_ionization);
-    fftwf_free(grids->xHI);
-    fftwf_free(grids->uvphot_filtered);
-    fftwf_free(grids->uvphot);
-    fftwf_free(grids->deltax_filtered);
-    fftwf_free(grids->deltax);
+    fftwf_free(UVBGgrids.J21_at_ionization);
+    fftwf_free(UVBGgrids.z_at_ionization);
+    fftwf_free(UVBGgrids.xHI);
+    fftwf_free(UVBGgrids.stars_slab);
+    fftwf_free(UVBGgrids.stars_slab_filtered);
+    fftwf_free(UVBGgrids.deltax_filtered);
+    fftwf_free(UVBGgrids.deltax);
 }
 
 
@@ -198,14 +211,14 @@ static inline int grid_index(int i, int j, int k, int dim, index_type type)
 }
 
 
-static void populate_grids(UVBGgrids *grids)
+static void populate_grids()
 {
     // TODO(smutch): Is this stored somewhere globally?
     int nranks = -1, this_rank = -1;
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    ptrdiff_t *slab_nix = grids->slab_nix;
-    ptrdiff_t *slab_ix_start = grids->slab_ix_start;
+    ptrdiff_t *slab_nix = UVBGgrids.slab_nix;
+    ptrdiff_t *slab_ix_start = UVBGgrids.slab_ix_start;
 
     // create buffers on each rank which is as large as the largest LOGICAL allocation on any single rank
     int buffer_size = 0;
@@ -215,7 +228,7 @@ static void populate_grids(UVBGgrids *grids)
 
     buffer_size *= uvbg_dim * uvbg_dim;
     float *buffer_mass = fftwf_alloc_real((size_t)buffer_size);
-    float *buffer_uvphot = fftwf_alloc_real((size_t)buffer_size);
+    float *buffer_stars_slab = fftwf_alloc_real((size_t)buffer_size);
 
     // I am going to reuse the RegionInd member which is from petapm.  I
     // *think* this is ok as we are doing this after the grav calculations.
@@ -236,18 +249,21 @@ static void populate_grids(UVBGgrids *grids)
 
     for (int i_r = 0; i_r < nranks; i_r++) {
 
+        const int ix_start = slab_ix_start[i_r];
+        const int nix = slab_nix[i_r];
+
         // init the buffers
         for (int ii = 0; ii < buffer_size; ii++) {
             buffer_mass[ii] = (float)0.;
-            buffer_uvphot[ii] = (float)0.;
+            buffer_stars_slab[ii] = (float)0.;
         }
 
         // fill the local buffer for this slab
         // TODO(smutch): This should become CIC
-        unsigned int count_mass = 0, count_uvphot = 0;
+        unsigned int count_mass = 0;
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(P[ii].RegionInd == i_r) {
-                int ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - (int)(slab_ix_start[i_r]);
+                int ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - ix_start;
                 int iy = pos_to_ngp(P[ii].Pos[1], box_size, uvbg_dim);
                 int iz = pos_to_ngp(P[ii].Pos[2], box_size, uvbg_dim);
 
@@ -255,17 +271,10 @@ static void populate_grids(UVBGgrids *grids)
 
                 buffer_mass[ind] += P[ii].Mass;
                 count_mass++;
-
-                if(P[ii].Type == 4) {
-                    buffer_uvphot[ind] += P[ii].Mass;
-                    count_uvphot++;
-                }
-
             }
         }
 
         message(0, "Added %d particles to mass grid.\n", count_mass);
-        message(0, "Added %d particles to uvphot grid.\n", count_uvphot);
 
         // reduce on to the correct rank
         if (this_rank == i_r) {
@@ -274,12 +283,7 @@ static void populate_grids(UVBGgrids *grids)
         else
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
-        if (this_rank == i_r) {
-            MPI_Reduce(MPI_IN_PLACE, buffer_uvphot, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        }
-        else
-            MPI_Reduce(buffer_uvphot, buffer_uvphot, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-
+        MPI_Reduce(buffer_stars_slab, UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
         if (this_rank == i_r) {
             const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
@@ -289,13 +293,13 @@ static void populate_grids(UVBGgrids *grids)
                     for (int iz = 0; iz < uvbg_dim; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
                         float mass = buffer_mass[grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL)];
-                        grids->deltax[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = mass * (float)deltax_conv_factor - 1.0f;
-                        grids->uvphot[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = buffer_uvphot[grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL)];
+                        UVBGgrids.deltax[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = mass * (float)deltax_conv_factor - 1.0f;
+                        UVBGgrids.stars_slab[grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED)] = buffer_stars_slab[grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL)];
                     }
         }
     }
 
-    fftwf_free(buffer_uvphot);
+    fftwf_free(buffer_stars_slab);
     fftwf_free(buffer_mass);
 
 }
@@ -383,23 +387,23 @@ static double RtoM(double R)
     return -1;
 }
 
-static void create_plans(UVBGgrids *grids)
+static void create_plans()
 {
-    grids->plan_dft_r2c = fftwf_mpi_plan_dft_r2c_3d(uvbg_dim, uvbg_dim, uvbg_dim,
-            grids->deltax, (fftwf_complex*)grids->deltax,
+    UVBGgrids.plan_dft_r2c = fftwf_mpi_plan_dft_r2c_3d(uvbg_dim, uvbg_dim, uvbg_dim,
+            UVBGgrids.deltax, (fftwf_complex*)UVBGgrids.deltax,
             MPI_COMM_WORLD, FFTW_PATIENT);
-    grids->plan_dft_c2r = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim,
-            (fftwf_complex*)grids->deltax, grids->deltax,
+    UVBGgrids.plan_dft_c2r = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim,
+            (fftwf_complex*)UVBGgrids.deltax, UVBGgrids.deltax,
             MPI_COMM_WORLD, FFTW_PATIENT);
 }
 
-static void destroy_plans(UVBGgrids *grids)
+static void destroy_plans()
 {
-    fftwf_destroy_plan(grids->plan_dft_c2r);
-    fftwf_destroy_plan(grids->plan_dft_r2c);
+    fftwf_destroy_plan(UVBGgrids.plan_dft_c2r);
+    fftwf_destroy_plan(UVBGgrids.plan_dft_r2c);
 }
 
-static void find_HII_bubbles(UVBGgrids *grids)
+static void find_HII_bubbles()
 {
     /* This function is based on find_hII_bubbles from 21cmFAST, but has been
      * largely rewritten. */
@@ -411,11 +415,11 @@ static void find_HII_bubbles(UVBGgrids *grids)
     int this_rank = -1;
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
-    double box_size = All.BoxSize; // Mpc/h
-    double pixel_volume = pow(box_size / (double)uvbg_dim, 3); // (Mpc/h)^3
+    double box_size = All.BoxSize; // Mpc/h comoving
+    double pixel_volume = pow(box_size / (double)uvbg_dim, 3); // (Mpc/h)^3 comoving
     double cell_length_factor = 0.620350491;
     double total_n_cells = pow((double)uvbg_dim, 3);
-    int local_nix = (int)(grids->slab_nix[this_rank]);
+    int local_nix = (int)(UVBGgrids.slab_nix[this_rank]);
     int slab_n_real = local_nix * uvbg_dim * uvbg_dim;
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
     double density_over_mean = 0;
@@ -431,32 +435,32 @@ static void find_HII_bubbles(UVBGgrids *grids)
         cell_length_factor = 1.0;
 
     // Init J21 and xHI
-    float* xHI = grids->xHI;
+    float* xHI = UVBGgrids.xHI;
     for (int ii = 0; ii < slab_n_real; ii++) {
         xHI[ii] = 1.0f;
     }
-    float* J21 = grids->J21;
+    float* J21 = UVBGgrids.J21;
     for (int ii = 0; ii < grid_n_real; ii++) {
         J21[ii] = 0.0f;
     }
 
     // Forward fourier transform to obtain k-space fields
-    float* deltax = grids->deltax;
+    float* deltax = UVBGgrids.deltax;
     fftwf_complex* deltax_unfiltered = (fftwf_complex*)deltax; // WATCH OUT!
-    fftwf_complex* deltax_filtered = grids->deltax_filtered;
-    fftwf_execute_dft_r2c(grids->plan_dft_r2c, deltax, deltax_unfiltered);
+    fftwf_complex* deltax_filtered = UVBGgrids.deltax_filtered;
+    fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, deltax, deltax_unfiltered);
 
-    float* uvphot = grids->uvphot;
-    fftwf_complex* uvphot_unfiltered = (fftwf_complex*)uvphot; // WATCH OUT!
-    fftwf_complex* uvphot_filtered = grids->uvphot_filtered;
-    fftwf_execute_dft_r2c(grids->plan_dft_r2c, uvphot, uvphot_unfiltered);
+    float* stars_slab = UVBGgrids.stars_slab;
+    fftwf_complex* stars_slab_unfiltered = (fftwf_complex*)stars_slab; // WATCH OUT!
+    fftwf_complex* stars_slab_filtered = UVBGgrids.stars_slab_filtered;
+    fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, stars_slab, stars_slab_unfiltered);
 
     // Remember to add the factor of VOLUME/TOT_NUM_PIXELS when converting from real space to k-space
     // Note: we will leave off factor of VOLUME, in anticipation of the inverse FFT below
-    int slab_n_complex = (int)(grids->slab_n_complex[this_rank]);
+    int slab_n_complex = (int)(UVBGgrids.slab_n_complex[this_rank]);
     for (int ii = 0; ii < slab_n_complex; ii++) {
         deltax_unfiltered[ii] /= total_n_cells;
-        uvphot_unfiltered[ii] /= total_n_cells;
+        stars_slab_unfiltered[ii] /= total_n_cells;
     }
 
     // Loop through filter radii
@@ -488,18 +492,18 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
         // copy the k-space grids
         memcpy(deltax_filtered, deltax_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-        memcpy(uvphot_filtered, uvphot_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+        memcpy(stars_slab_filtered, stars_slab_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
 
         // do the filtering unless this is the last filter step
-        int local_ix_start = (int)(grids->slab_ix_start[this_rank]);
+        int local_ix_start = (int)(UVBGgrids.slab_ix_start[this_rank]);
         if (!flag_last_filter_step) {
             filter(deltax_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
-            filter(uvphot_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
+            filter(stars_slab_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
         }
 
         // inverse fourier transform back to real space
-        fftwf_execute_dft_c2r(grids->plan_dft_c2r, deltax_filtered, (float*)deltax_filtered);
-        fftwf_execute_dft_c2r(grids->plan_dft_c2r, uvphot_filtered, (float*)uvphot_filtered);
+        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, deltax_filtered, (float*)deltax_filtered);
+        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, stars_slab_filtered, (float*)stars_slab_filtered);
 
         // Perform sanity checks to account for aliasing effects
         for (int ix = 0; ix < local_nix; ix++)
@@ -507,7 +511,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
-                    ((float*)uvphot_filtered)[i_padded] = fmaxf(((float*)uvphot_filtered)[i_padded], 0.0f);
+                    ((float*)stars_slab_filtered)[i_padded] = fmaxf(((float*)stars_slab_filtered)[i_padded], 0.0f);
                 }
 
 
@@ -536,7 +540,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
         //     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
         //     big_file_mpi_create_block(&fout, &block, "deltax", "=f4", 1, n_ranks, uvbg_dim*uvbg_dim*uvbg_dim, MPI_COMM_WORLD);
         //     BigBlockPtr ptr = {0};
-        //     int start_elem = this_rank > 1 ? grids->slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
+        //     int start_elem = this_rank > 1 ? UVBGgrids.slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
         //     big_block_seek(&block, &ptr, start_elem);
         //     BigArray arr = {0};
         //     big_array_init(&arr, grid, "=f4", 1, (size_t[]){grid_size}, NULL);
@@ -566,12 +570,11 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
                     density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
 
-                    f_coll_stars = (double)((float*)uvphot_filtered)[i_padded] / (RtoM(R) * density_over_mean)
+                    f_coll_stars = (double)((float*)stars_slab_filtered)[i_padded] / (RtoM(R) * density_over_mean)
                         * (4.0 / 3.0) * M_PI * pow(R, 3.0) / pixel_volume;
 
                     // TODO(smutch): This needs to be calculated in some way. I reckon we keep the stellar mass grid alive and do a difference.
-                    const float sfr_filtered = 1.0f;  // TODO(smutch): This is a dummy placeholder
-                    sfr_density = (double)(sfr_filtered) / pixel_volume; // In internal units
+                    sfr_density = (double)(stars_slab_filtered)[i_padded] / pixel_volume; // In internal units
 
                     const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
@@ -597,11 +600,11 @@ static void find_HII_bubbles(UVBGgrids *grids)
                     }
 
                     // Check if new ionisation
-                    float* z_in = grids->z_at_ionization;
+                    float* z_in = UVBGgrids.z_at_ionization;
                     if ((xHI[i_real] < FLOAT_REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
                     {
                         z_in[i_real] = (float)redshift;
-                        grids->J21_at_ionization[i_real] = J21_aux * ReionGammaHaloBias;
+                        UVBGgrids.J21_at_ionization[i_real] = J21_aux * ReionGammaHaloBias;
                     }
                 } // iz
 
@@ -609,7 +612,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
     }
 
     // Reduce the J21 grid onto all ranks
-    MPI_Allreduce(MPI_IN_PLACE, grids->J21, grid_n_real, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, UVBGgrids.J21, grid_n_real, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
 
     // DEBUG ==========================================================================================================
     // {
@@ -626,7 +629,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
     //             BigBlock block;
     //             big_file_create_block(&fout, &block, "J21", "=f4", 1, 1, (size_t[]){grid_n_real});
     //             BigArray arr = {0};
-    //             big_array_init(&arr, grids->J21, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+    //             big_array_init(&arr, UVBGgrids.J21, "=f4", 1, (size_t[]){grid_n_real}, NULL);
     //             BigBlockPtr ptr = {0};
     //             big_block_write(&block, &ptr, &arr);
     //             big_block_close(&block);
@@ -660,8 +663,8 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
     volume_weighted_global_xHI /= total_n_cells;
     mass_weighted_global_xHI /= mass_weight;
-    grids->volume_weighted_global_xHI = (float)volume_weighted_global_xHI;
-    grids->mass_weighted_global_xHI = (float)mass_weighted_global_xHI;
+    UVBGgrids.volume_weighted_global_xHI = (float)volume_weighted_global_xHI;
+    UVBGgrids.mass_weighted_global_xHI = (float)mass_weighted_global_xHI;
     
 }
 
@@ -671,26 +674,26 @@ void calculate_uvbg()
     walltime_measure("/Misc");
     message(0, "Calculating UVBG grids.\n");
 
-    UVBGgrids grids;
-    assign_slabs(&grids);
-    malloc_grids(&grids);
+    assign_slabs();
+    malloc_permanent_uvbg_grids();
+    malloc_grids();
     
-    create_plans(&grids);
+    create_plans();
     walltime_measure("/UVBG/create_plans");
 
-    populate_grids(&grids);
+    populate_grids();
     walltime_measure("/UVBG/populate_grids");
 
     // DEBUG =========================================================================================
     // int this_rank;
     // MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    // int local_nix = grids.slab_nix[this_rank];
+    // int local_nix = UVBGgrids.slab_nix[this_rank];
     // int grid_size = (size_t)(local_nix * uvbg_dim * uvbg_dim);
     // float* grid = (float*)calloc(grid_size, sizeof(float));
     // for (int ii = 0; ii < local_nix; ii++)
     //     for (int jj = 0; jj < uvbg_dim; jj++)
     //         for (int kk = 0; kk < uvbg_dim; kk++)
-    //             grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = (grids.deltax)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
+    //             grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = (UVBGgrids.deltax)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
 
     // FILE *fout;
     // char fname[128];
@@ -706,12 +709,13 @@ void calculate_uvbg()
 
 
     message(0, "Away to call find_HII_bubbles...\n");
-    find_HII_bubbles(&grids);
+    find_HII_bubbles();
 
     walltime_measure("/UVBG/find_HII_bubbles");
 
-    destroy_plans(&grids);
-    free_grids(&grids);
+    destroy_plans();
+    free_permanent_uvbg_grids();
+    free_grids();
 
     walltime_measure("/UVBG");
 }
