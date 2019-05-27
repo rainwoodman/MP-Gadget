@@ -72,20 +72,22 @@ static void malloc_grids(UVBGgrids *grids)
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
     ptrdiff_t slab_n_complex = grids->slab_n_complex[this_rank];
     ptrdiff_t slab_n_real = grids->slab_nix[this_rank] * uvbg_dim * uvbg_dim;
+    
+    // Note that this is a full grid stored on every rank!
+    grids->J21 = fftwf_alloc_real((size_t)uvbg_dim * (size_t)uvbg_dim * (size_t)uvbg_dim);
 
     grids->deltax = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
     grids->deltax_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
     grids->uvphot = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
     grids->uvphot_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
     grids->xHI = fftwf_alloc_real((size_t)slab_n_real);
-    grids->J21 = fftwf_alloc_real((size_t)slab_n_real);
     grids->z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
     grids->J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
 
     // Init grids for which values persist for the entire simulation
     for(ptrdiff_t ii=0; ii < slab_n_real; ++ii) {
-        grids->z_at_ionization[ii] = -999f;
-        grids->J21_at_ionization[ii] = -999f;
+        grids->z_at_ionization[ii] = -999.0f;
+        grids->J21_at_ionization[ii] = -999.0f;
     }
 
     grids->volume_weighted_global_xHI = 1.0f;
@@ -98,9 +100,10 @@ static void free_grids(UVBGgrids *grids)
     free(grids->slab_ix_start);
     free(grids->slab_nix);
 
+    fftwf_free(grids->J21);
+
     fftwf_free(grids->J21_at_ionization);
     fftwf_free(grids->z_at_ionization);
-    fftwf_free(grids->J21);
     fftwf_free(grids->xHI);
     fftwf_free(grids->uvphot_filtered);
     fftwf_free(grids->uvphot);
@@ -244,7 +247,7 @@ static void populate_grids(UVBGgrids *grids)
         unsigned int count_mass = 0, count_uvphot = 0;
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(P[ii].RegionInd == i_r) {
-                int ix = (int)(pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - slab_ix_start[i_r]);
+                int ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - (int)(slab_ix_start[i_r]);
                 int iy = pos_to_ngp(P[ii].Pos[1], box_size, uvbg_dim);
                 int iz = pos_to_ngp(P[ii].Pos[2], box_size, uvbg_dim);
 
@@ -266,16 +269,16 @@ static void populate_grids(UVBGgrids *grids)
 
         // reduce on to the correct rank
         if (this_rank == i_r) {
-            MPI_Reduce(MPI_IN_PLACE, buffer_mass, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(MPI_IN_PLACE, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         }
         else
-            MPI_Reduce(buffer_mass, buffer_mass, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
         if (this_rank == i_r) {
-            MPI_Reduce(MPI_IN_PLACE, buffer_uvphot, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(MPI_IN_PLACE, buffer_uvphot, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         }
         else
-            MPI_Reduce(buffer_uvphot, buffer_uvphot, (int)buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(buffer_uvphot, buffer_uvphot, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
 
         if (this_rank == i_r) {
@@ -414,6 +417,7 @@ static void find_HII_bubbles(UVBGgrids *grids)
     double total_n_cells = pow((double)uvbg_dim, 3);
     int local_nix = (int)(grids->slab_nix[this_rank]);
     int slab_n_real = local_nix * uvbg_dim * uvbg_dim;
+    int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
     double density_over_mean = 0;
     double sfr_density = 0;
     double f_coll_stars = 0;
@@ -427,11 +431,13 @@ static void find_HII_bubbles(UVBGgrids *grids)
         cell_length_factor = 1.0;
 
     // Init J21 and xHI
-    float* J21 = grids->J21;
     float* xHI = grids->xHI;
     for (int ii = 0; ii < slab_n_real; ii++) {
-        J21[ii] = 0.0f;
         xHI[ii] = 1.0f;
+    }
+    float* J21 = grids->J21;
+    for (int ii = 0; ii < grid_n_real; ii++) {
+        J21[ii] = 0.0f;
     }
 
     // Forward fourier transform to obtain k-space fields
@@ -573,8 +579,10 @@ static void find_HII_bubbles(UVBGgrids *grids)
                     if (f_coll_stars > 1.0 / ReionEfficiency) // IONISED!!!!
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
-                        if (xHI[i_real] > FLOAT_REL_TOL)
-                            J21[i_real] = J21_aux;
+                        if (xHI[i_real] > FLOAT_REL_TOL) {
+                            const int i_grid_real = grid_index(ix + local_ix_start, iy, iz, uvbg_dim, INDEX_REAL);
+                            J21[i_grid_real] = J21_aux;
+                        }
 
                         // Mark as ionised
                         xHI[i_real] = 0;
@@ -599,6 +607,34 @@ static void find_HII_bubbles(UVBGgrids *grids)
 
         R /= ReionDeltaRFactor;
     }
+
+    // Reduce the J21 grid onto all ranks
+    MPI_Allreduce(MPI_IN_PLACE, grids->J21, grid_n_real, MPI_FLOAT, MPI_SUM, MPI_COMM_WORLD);
+
+    // DEBUG ==========================================================================================================
+    // {
+    //     int n_ranks;
+    //     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+    //     for(int i_rank = 0; i_rank < n_ranks; i_rank++)
+    //     {
+    //         if(this_rank == i_rank)
+    //         {
+    //             BigFile fout;
+    //             char fname[256];
+    //             sprintf(fname, "output/J21_check-rank%03d.bf", i_rank);
+    //             big_file_create(&fout, fname);
+    //             BigBlock block;
+    //             big_file_create_block(&fout, &block, "J21", "=f4", 1, 1, (size_t[]){grid_n_real});
+    //             BigArray arr = {0};
+    //             big_array_init(&arr, grids->J21, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+    //             BigBlockPtr ptr = {0};
+    //             big_block_write(&block, &ptr, &arr);
+    //             big_block_close(&block);
+    //             big_file_close(&fout);
+    //         }
+    //     }
+    // }
+    // ================================================================================================================
 
     // Find the volume and mass weighted neutral fractions
     // TODO: The deltax grid will have rounding errors from forward and reverse
@@ -646,26 +682,26 @@ void calculate_uvbg()
     walltime_measure("/UVBG/populate_grids");
 
     // DEBUG =========================================================================================
-    int this_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    int local_nix = grids.slab_nix[this_rank];
-    int grid_size = (size_t)(local_nix * uvbg_dim * uvbg_dim);
-    float* grid = (float*)calloc(grid_size, sizeof(float));
-    for (int ii = 0; ii < local_nix; ii++)
-        for (int jj = 0; jj < uvbg_dim; jj++)
-            for (int kk = 0; kk < uvbg_dim; kk++)
-                grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = (grids.deltax)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
+    // int this_rank;
+    // MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+    // int local_nix = grids.slab_nix[this_rank];
+    // int grid_size = (size_t)(local_nix * uvbg_dim * uvbg_dim);
+    // float* grid = (float*)calloc(grid_size, sizeof(float));
+    // for (int ii = 0; ii < local_nix; ii++)
+    //     for (int jj = 0; jj < uvbg_dim; jj++)
+    //         for (int kk = 0; kk < uvbg_dim; kk++)
+    //             grid[grid_index(ii, jj, kk, uvbg_dim, INDEX_REAL)] = (grids.deltax)[grid_index(ii, jj, kk, uvbg_dim, INDEX_PADDED)];
 
-    FILE *fout;
-    char fname[128];
-    sprintf(fname, "output/dump_r%03d.dat", this_rank);
-    if((fout = fopen(fname, "wb")) == NULL) {
-      endrun(1, "poop...");
-    }
-    fwrite(grid, sizeof(float), grid_size, fout);
-    fclose(fout);
-    free(grid);
-    walltime_measure("/Misc");
+    // FILE *fout;
+    // char fname[128];
+    // sprintf(fname, "output/dump_r%03d.dat", this_rank);
+    // if((fout = fopen(fname, "wb")) == NULL) {
+    //   endrun(1, "poop...");
+    // }
+    // fwrite(grid, sizeof(float), grid_size, fout);
+    // fclose(fout);
+    // free(grid);
+    // walltime_measure("/Misc");
     // ===============================================================================================
 
 
