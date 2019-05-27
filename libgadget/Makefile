@@ -127,7 +127,7 @@ utils/spinlocks.o
 GADGET_OBJS := $(GADGET_OBJS:%=.objs/%)
 GADGET_UTILS_OBJS := $(GADGET_UTILS_OBJS:%=.objs/%)
 
-all: libgadget.a libgadget-utils.a compile_commands.json
+all: libgadget.a libgadget-utils.a
 
 .PHONY: all test run-tests
 
@@ -202,7 +202,7 @@ MPI_SHOWME := $(shell $(MPICC) -showme)
 
 COMPDB_ENTRIES = $(addsuffix .compdb_entry, $(basename $(GADGET_OBJS)))
 
-compile_commands.json: $(COMPDB_ENTRIES)
+compile_commands: $(COMPDB_ENTRIES)
 	@echo "[" > $@.tmp
 	@cat $^ >> $@.tmp
 	@sed '$$d' < $@.tmp > $@
