@@ -23,6 +23,7 @@
 #include "timestep.h"
 #include "timebinmgr.h"
 #include "cosmology.h"
+#include "uvbg.h"
 
 /*! \file init.c
  *  \brief code for initialisation of a simulation from initial conditions
@@ -260,6 +261,7 @@ inttime_t init(int RestartSnapNum, DomainDecomp * ddecomp)
     if(All.DensityOn)
         setup_smoothinglengths(RestartSnapNum, ddecomp, Ti_Current);
 
+    malloc_permanent_uvbg_grids();
     return Ti_Current;
 }
 

@@ -495,6 +495,8 @@ run(int RestartSnapNum)
     }
 
     close_outputfiles();
+
+    free_permanent_uvbg_grids();
 }
 
 void write_cpu_log(int NumCurrentTiStep, FILE * FdCPU)

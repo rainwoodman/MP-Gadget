@@ -73,8 +73,15 @@ void malloc_permanent_uvbg_grids()
     size_t grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
 
     // Note that these are full grids stored on every rank!
-    UVBGgrids.J21 = mymalloc("J21", grid_n_real);
-    UVBGgrids.stars = mymalloc("stars", grid_n_real);
+    UVBGgrids.J21 = mymalloc("J21", sizeof(float) * grid_n_real);
+    UVBGgrids.stars = mymalloc("stars", sizeof(float) * grid_n_real);
+
+    for(size_t ii=0; ii < grid_n_real; ii++) {
+        UVBGgrids.J21[ii] = 0.0f;
+    }
+    for(size_t ii=0; ii < grid_n_real; ii++) {
+        UVBGgrids.stars[ii] = 0.0f;
+    }
 }
 
 void free_permanent_uvbg_grids()
@@ -675,7 +682,6 @@ void calculate_uvbg()
     message(0, "Calculating UVBG grids.\n");
 
     assign_slabs();
-    malloc_permanent_uvbg_grids();
     malloc_grids();
     
     create_plans();
@@ -714,7 +720,6 @@ void calculate_uvbg()
     walltime_measure("/UVBG/find_HII_bubbles");
 
     destroy_plans();
-    free_permanent_uvbg_grids();
     free_grids();
 
     walltime_measure("/UVBG");

@@ -536,9 +536,7 @@ static int make_particle_star(int child, int parent, int placement)
     for(j = 0; j < NMETALS; j++)
         STARP(child).Metals[j] = oldslot.Metals[j];
 
-    // Add this to the gross stellar mass grid
-    UVBGgrids.stars[0]++;
-    // TODO(smutch): THIS!!!!
+    // TODO(smutch): Add mass to the UVBGgrids.stars grid
 
     return retflag;
 }
