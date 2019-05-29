@@ -32,9 +32,6 @@
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
 
-// TODO(smutch): This should be a parameter.
-static const int uvbg_dim = 64;
-
 struct UVBGgrids_type UVBGgrids;
 
 static void assign_slabs()
@@ -132,7 +129,7 @@ static void free_grids()
 }
 
 
-static inline int pos_to_ngp(double x, double side, int nx)
+int pos_to_ngp(double x, double side, int nx)
 {
     int ind = (int)nearbyint(x / side * (double)nx);
 
@@ -189,13 +186,7 @@ static int searchsorted(void* val,
 }
 
 
-typedef enum index_type {
-    INDEX_PADDED = 5674,
-    INDEX_REAL,
-    INDEX_COMPLEX_HERM,
-} index_type;
-
-static inline int grid_index(int i, int j, int k, int dim, index_type type)
+int grid_index(int i, int j, int k, int dim, index_type type)
 {
     int ind = -1;
 

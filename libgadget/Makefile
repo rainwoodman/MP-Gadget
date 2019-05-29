@@ -202,7 +202,7 @@ MPI_SHOWME := $(shell $(MPICC) -showme)
 
 COMPDB_ENTRIES = $(addsuffix .compdb_entry, $(basename $(GADGET_OBJS)))
 
-compile_commands: $(COMPDB_ENTRIES)
+compile_commands.json: $(COMPDB_ENTRIES)
 	@echo "[" > $@.tmp
 	@cat $^ >> $@.tmp
 	@sed '$$d' < $@.tmp > $@

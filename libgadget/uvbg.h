@@ -3,6 +3,9 @@
 
 #include <fftw3.h>
 
+// TODO(smutch): This should be a parameter
+const int uvbg_dim = 64;
+
 struct UVBGgrids_type {
     ptrdiff_t *slab_nix;
     ptrdiff_t *slab_ix_start;
@@ -28,6 +31,14 @@ struct UVBGgrids_type {
 
 extern struct UVBGgrids_type UVBGgrids; 
 
+typedef enum index_type {
+    INDEX_PADDED = 5674,
+    INDEX_REAL,
+    INDEX_COMPLEX_HERM,
+} index_type;
+
+int pos_to_ngp(double x, double side, int nx);
+int grid_index(int i, int j, int k, int dim, index_type type);
 void calculate_uvbg();
 void malloc_permanent_uvbg_grids();
 void free_permanent_uvbg_grids();

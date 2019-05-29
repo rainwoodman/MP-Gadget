@@ -536,7 +536,14 @@ static int make_particle_star(int child, int parent, int placement)
     for(j = 0; j < NMETALS; j++)
         STARP(child).Metals[j] = oldslot.Metals[j];
 
-    // TODO(smutch): Add mass to the UVBGgrids.stars grid
+    // TODO(smutch): Use CIC
+    int coord[3] = {0};
+    for(int ii=0; ii<3; ii++) {
+        coord[ii] = pos_to_ngp(P[child].Pos[2], All.BoxSize, uvbg_dim);
+    }
+
+    // TODO(smutch): Is this the correct mass to use, or should we be using the result of `find_star_mass`?
+    UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], uvbg_dim, INDEX_REAL)] += P[child].Mass;
 
     return retflag;
 }
