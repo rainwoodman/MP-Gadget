@@ -4,7 +4,7 @@
 #include <fftw3.h>
 
 // TODO(smutch): This should be a parameter
-const int uvbg_dim = 64;
+#define UVBG_DIM 64
 
 struct UVBGgrids_type {
     ptrdiff_t *slab_nix;

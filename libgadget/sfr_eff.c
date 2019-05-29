@@ -539,11 +539,11 @@ static int make_particle_star(int child, int parent, int placement)
     // TODO(smutch): Use CIC
     int coord[3] = {0};
     for(int ii=0; ii<3; ii++) {
-        coord[ii] = pos_to_ngp(P[child].Pos[2], All.BoxSize, uvbg_dim);
+        coord[ii] = pos_to_ngp(P[child].Pos[2], All.BoxSize, UVBG_DIM);
     }
 
     // TODO(smutch): Is this the correct mass to use, or should we be using the result of `find_star_mass`?
-    UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], uvbg_dim, INDEX_REAL)] += P[child].Mass;
+    UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], UVBG_DIM, INDEX_REAL)] += P[child].Mass;
 
     return retflag;
 }
