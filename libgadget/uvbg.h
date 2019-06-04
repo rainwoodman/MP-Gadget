@@ -11,19 +11,26 @@ struct UVBGgrids_type {
     ptrdiff_t *slab_ix_start;
     ptrdiff_t *slab_n_complex;
     
-    float *J21;
+    union {
+        float *J21;
+        float *prev_stars;
+    };
     float *stars;
 
     float *deltax;
     fftwf_complex *deltax_filtered;
     float *stars_slab;
     fftwf_complex *stars_slab_filtered;
+    float *sfr;
+    fftwf_complex *sfr_filtered;
     float *xHI;
     float *z_at_ionization;
     float *J21_at_ionization;
 
     fftwf_plan plan_dft_r2c;
     fftwf_plan plan_dft_c2r;
+
+    double last_a;  //< Last called expansion factor
 
     float volume_weighted_global_xHI;
     float mass_weighted_global_xHI;

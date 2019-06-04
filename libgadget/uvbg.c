@@ -21,6 +21,7 @@
 #include <complex.h>
 #include <fftw3.h>
 #include <stdbool.h>
+#include <gsl/gsl_integration.h>
 
 #include "uvbg.h"
 #include "utils.h"
@@ -33,6 +34,38 @@
 #define FLOAT_REL_TOL (float)1e-5
 
 struct UVBGgrids_type UVBGgrids;
+
+double integrand_time_to_present(double a, void *dummy)
+{
+    double omega_m = All.CP.Omega0;
+    double omega_k = All.CP.OmegaK;
+    double omega_lambda = All.CP.OmegaLambda;
+
+    return 1 / sqrt(omega_m / a + omega_k + omega_lambda * a * a);
+}
+
+static double time_to_present(double a)
+{
+#define WORKSIZE 1000
+    gsl_function F;
+    gsl_integration_workspace* workspace;
+    double time;
+    double result;
+    double abserr;
+
+    workspace = gsl_integration_workspace_alloc(WORKSIZE);
+    F.function = &integrand_time_to_present;
+
+    gsl_integration_qag(&F, a, 1.0, 1.0 / All.CP.Hubble,
+        1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
+
+    time = 1 / All.CP.Hubble * result;
+
+    gsl_integration_workspace_free(workspace);
+
+    // return time to present as a function of redshift
+    return time;
+}
 
 static void assign_slabs()
 {
@@ -67,6 +100,7 @@ static void assign_slabs()
 
 void malloc_permanent_uvbg_grids()
 {
+    UVBGgrids.last_a = All.Time;
     size_t grid_n_real = UVBG_DIM * UVBG_DIM * UVBG_DIM;
 
     // Note that these are full grids stored on every rank!
@@ -96,8 +130,10 @@ static void malloc_grids()
     
     UVBGgrids.deltax = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
     UVBGgrids.deltax_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
-    UVBGgrids.stars_slab = fftwf_alloc_complex((size_t)(slab_n_complex));
+    UVBGgrids.stars_slab = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
     UVBGgrids.stars_slab_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
+    UVBGgrids.sfr = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
+    UVBGgrids.sfr_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
     UVBGgrids.xHI = fftwf_alloc_real((size_t)slab_n_real);
     UVBGgrids.z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
     UVBGgrids.J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
@@ -227,6 +263,7 @@ static void populate_grids()
     buffer_size *= UVBG_DIM * UVBG_DIM;
     float *buffer_mass = fftwf_alloc_real((size_t)buffer_size);
     float *buffer_stars_slab = fftwf_alloc_real((size_t)buffer_size);
+    float *buffer_sfr = fftwf_alloc_real((size_t)buffer_size);
 
     // I am going to reuse the RegionInd member which is from petapm.  I
     // *think* this is ok as we are doing this after the grav calculations.
@@ -254,7 +291,14 @@ static void populate_grids()
         for (int ii = 0; ii < buffer_size; ii++) {
             buffer_mass[ii] = (float)0.;
             buffer_stars_slab[ii] = (float)0.;
+            buffer_sfr[ii] = (float)0.;
         }
+
+        // copy the current stellar mass grid so we can work out the SFRs
+        // WATCH OUT: prev_stars is a union with J21 to save memory.  Until
+        // find_HII_bubbles is called again, J21 will be invalid!
+        const size_t grid_n_real = UVBG_DIM * UVBG_DIM * UVBG_DIM;
+        memcpy(UVBGgrids.prev_stars, UVBGgrids.stars, sizeof(float) * grid_n_real);
 
         // fill the local buffer for this slab
         // TODO(smutch): This should become CIC
@@ -282,6 +326,13 @@ static void populate_grids()
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
         MPI_Reduce(buffer_stars_slab, UVBGgrids.stars + grid_index(ix_start, 0, 0, UVBG_DIM, INDEX_REAL), nix*UVBG_DIM*UVBG_DIM, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(buffer_sfr, UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, UVBG_DIM, INDEX_REAL), nix*UVBG_DIM*UVBG_DIM, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        
+        // TODO(smutch): These could perhaps be precalculated?
+        const float inv_dt = (float)time_to_present(UVBGgrids.last_a) - (float)time_to_present(All.Time);
+        for(int ii=0; ii < grid_n_real; ii++) {
+            buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt;
+        }
 
         if (this_rank == i_r) {
             const double tot_n_cells = UVBG_DIM * UVBG_DIM * UVBG_DIM;
@@ -290,15 +341,21 @@ static void populate_grids()
                 for (int iy = 0; iy < UVBG_DIM; iy++)
                     for (int iz = 0; iz < UVBG_DIM; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
-                        float mass = buffer_mass[grid_index(ix, iy, iz, UVBG_DIM, INDEX_REAL)];
-                        UVBGgrids.deltax[grid_index(ix, iy, iz, UVBG_DIM, INDEX_PADDED)] = mass * (float)deltax_conv_factor - 1.0f;
-                        UVBGgrids.stars_slab[grid_index(ix, iy, iz, UVBG_DIM, INDEX_PADDED)] = buffer_stars_slab[grid_index(ix, iy, iz, UVBG_DIM, INDEX_REAL)];
+                        const int ind_real = grid_index(ix, iy, iz, UVBG_DIM, INDEX_REAL);
+                        const int ind_pad = grid_index(ix, iy, iz, UVBG_DIM, INDEX_PADDED);
+                        const float mass = buffer_mass[ind_real];
+                        UVBGgrids.deltax[ind_pad] = mass * (float)deltax_conv_factor - 1.0f;
+                        UVBGgrids.sfr[ind_pad] = buffer_sfr[ind_real];
+                        UVBGgrids.stars_slab[ind_pad] = buffer_stars_slab[ind_real];
                     }
         }
     }
 
     fftwf_free(buffer_stars_slab);
     fftwf_free(buffer_mass);
+
+    // set the last_a value so we can calulate dt for the SFR at the next call
+    UVBGgrids.last_a = All.Time;
 
 }
 
@@ -453,6 +510,11 @@ static void find_HII_bubbles()
     fftwf_complex* stars_slab_filtered = UVBGgrids.stars_slab_filtered;
     fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, stars_slab, stars_slab_unfiltered);
 
+    float* sfr = UVBGgrids.sfr;
+    fftwf_complex* sfr_unfiltered = (fftwf_complex*)sfr; // WATCH OUT!
+    fftwf_complex* sfr_filtered = UVBGgrids.sfr_filtered;
+    fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, sfr, sfr_unfiltered);
+
     // Remember to add the factor of VOLUME/TOT_NUM_PIXELS when converting from real space to k-space
     // Note: we will leave off factor of VOLUME, in anticipation of the inverse FFT below
     int slab_n_complex = (int)(UVBGgrids.slab_n_complex[this_rank]);
@@ -491,12 +553,14 @@ static void find_HII_bubbles()
         // copy the k-space grids
         memcpy(deltax_filtered, deltax_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
         memcpy(stars_slab_filtered, stars_slab_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+        memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
 
         // do the filtering unless this is the last filter step
         int local_ix_start = (int)(UVBGgrids.slab_ix_start[this_rank]);
         if (!flag_last_filter_step) {
             filter(deltax_filtered, local_ix_start, local_nix, UVBG_DIM, (float)R);
             filter(stars_slab_filtered, local_ix_start, local_nix, UVBG_DIM, (float)R);
+            filter(sfr_filtered, local_ix_start, local_nix, UVBG_DIM, (float)R);
         }
 
         // inverse fourier transform back to real space
@@ -510,6 +574,7 @@ static void find_HII_bubbles()
                     i_padded = grid_index(ix, iy, iz, UVBG_DIM, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                     ((float*)stars_slab_filtered)[i_padded] = fmaxf(((float*)stars_slab_filtered)[i_padded], 0.0f);
+                    ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                 }
 
 
@@ -571,8 +636,7 @@ static void find_HII_bubbles()
                     f_coll_stars = (double)((float*)stars_slab_filtered)[i_padded] / (RtoM(R) * density_over_mean)
                         * (4.0 / 3.0) * M_PI * pow(R, 3.0) / pixel_volume;
 
-                    // TODO(smutch): This needs to be calculated in some way. I reckon we keep the stellar mass grid alive and do a difference.
-                    sfr_density = (double)(stars_slab_filtered)[i_padded] / pixel_volume; // In internal units
+                    sfr_density = (double)(sfr_filtered)[i_padded] / pixel_volume; // In internal units
 
                     const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
