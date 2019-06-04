@@ -329,7 +329,9 @@ static void populate_grids()
         MPI_Reduce(buffer_sfr, UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, UVBG_DIM, INDEX_REAL), nix*UVBG_DIM*UVBG_DIM, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         
         // TODO(smutch): These could perhaps be precalculated?
-        const float inv_dt = (float)time_to_present(UVBGgrids.last_a) - (float)time_to_present(All.Time);
+        const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
+        message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt) * All.UnitTime_in_s / SEC_PER_MEGAYEAR);
+
         for(int ii=0; ii < grid_n_real; ii++) {
             buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt;
         }
