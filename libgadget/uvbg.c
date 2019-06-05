@@ -44,7 +44,7 @@ double integrand_time_to_present(double a, void *dummy)
     return 1 / sqrt(omega_m / a + omega_k + omega_lambda * a * a);
 }
 
-static double time_to_present(double a)
+double time_to_present(double a)
 {
 #define WORKSIZE 1000
     gsl_function F;

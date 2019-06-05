@@ -239,13 +239,21 @@ void GetParticleUVBG(int i, struct UVBG * uvbg) {
     double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], UVBG_DIM, INDEX_REAL)];
     uvbg->J_UV = J21;
 
+    // TODO(smutch): Need to confirm these are the correct quantities.
+    // I had to guess by comparing the TREECOL input files to the revant source
+    // papers, as there is no unit information or descriptions.
+
+    // TODO(smutch): The conversions below are calculated for a UV slope of α=3.0.
+    // Code will need to be added to calculate these values at the start of
+    // each run based on an alpha set in the input paramter file.
+
     // ionisation rate
     uvbg->gJH0   = 2.090e-12 * J21; // s-1
     uvbg->gJHep  = 5.049e-13 * J21; // s-1
     uvbg->gJHe0  = 6.118e-15 * J21; // s-1
 
     // photoheating rate
-    uvbg->epsH0  = 5.951e-12 * J21 * 1.60218e-12; // erg s-1
-    uvbg->epsHep = 3.180e-12 * J21 * 1.60218e-12; // erg s-1
-    uvbg->epsHe0 = 6.883e-14 * J21 * 1.60218e-12; // erg s-1
+    uvbg->epsH0  = 5.951e-12 * J21 * 1.60218e-12;  // erg s-1
+    uvbg->epsHep = 3.180e-12 * J21 * 1.60218e-12;  // erg s-1
+    uvbg->epsHe0 = 6.883e-14 * J21 * 1.60218e-12;  // erg s-1
 }

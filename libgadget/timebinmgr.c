@@ -4,6 +4,7 @@
 
 #include "timebinmgr.h"
 #include "utils.h"
+#include "uvbg.h"
 
 /*! table with desired sync points. All forces and phase space variables are synchonized to the same order. */
 static SyncPoint * SyncPoints;
@@ -113,14 +114,30 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
     SyncPoints[0].write_fof = 0;
     SyncPoints[0].calc_uvbg = 0;
+    NSyncPoints = 1;
 
-    SyncPoints[1].a = All.TimeMax;
-    SyncPoints[1].loga = log(All.TimeMax);
-    SyncPoints[1].write_snapshot = 1;
-    SyncPoints[1].write_fof = 0;
-    SyncPoints[1].calc_uvbg = 1;
+    // UVBG calculation every 10 Myr from z=20
+    {
+        double z_start = 20.;
+        double a = 1.0 / (1.0 + z_start);
 
-    NSyncPoints = 2;
+        while (a <= All.TimeMax) {
+            SyncPoints[++NSyncPoints].a = a;
+            SyncPoints[NSyncPoints].loga = log(a);
+            SyncPoints[NSyncPoints].write_snapshot = 1;
+            SyncPoints[NSyncPoints].write_fof = 0;
+            SyncPoints[NSyncPoints].calc_uvbg = 1;
+
+            // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
+            double delta_a = 0.0001;
+            double lbt = time_to_present(a);
+            double delta_lbt = 0.0;
+            while ((delta_lbt <= 10.0) && (a <= All.TimeMax)) {
+                a += delta_a;
+                delta_lbt = lbt - time_to_present(a);
+            }
+        }
+    }
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
     for(i = 0; i < Sync.OutputListLength; i ++) {

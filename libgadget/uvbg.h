@@ -46,6 +46,7 @@ typedef enum index_type {
 
 int pos_to_ngp(double x, double side, int nx);
 int grid_index(int i, int j, int k, int dim, index_type type);
+double time_to_present(double a);
 void calculate_uvbg();
 void malloc_permanent_uvbg_grids();
 void free_permanent_uvbg_grids();
