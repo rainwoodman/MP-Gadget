@@ -122,11 +122,11 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         double a = 1.0 / (1.0 + z_start);
 
         while (a <= All.TimeMax) {
-            SyncPoints[++NSyncPoints].a = a;
+            SyncPoints[NSyncPoints].a = a;
             SyncPoints[NSyncPoints].loga = log(a);
             SyncPoints[NSyncPoints].write_snapshot = 1;
             SyncPoints[NSyncPoints].write_fof = 0;
-            SyncPoints[NSyncPoints].calc_uvbg = 1;
+            SyncPoints[NSyncPoints++].calc_uvbg = 1;
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             double delta_a = 0.0001;

@@ -332,7 +332,7 @@ static void populate_grids()
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
         message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt) * All.UnitTime_in_s / SEC_PER_MEGAYEAR);
 
-        for(int ii=0; ii < grid_n_real; ii++) {
+        for(int ii=0; ii < buffer_size; ii++) {
             buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt;
         }
 
