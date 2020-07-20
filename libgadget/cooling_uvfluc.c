@@ -144,7 +144,7 @@ init_uvf_table(const char * UVFluctuationFile, const double BoxSize, const doubl
  * Otherwise returns the global UVBG passed in.
  *
  * */
-struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset)
+struct UVBG _get_local_UVBG_from_global(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset)
 {
     if(!UVF.enabled) {
         /* directly use the TREECOOL table if UVF is disabled */
@@ -168,39 +168,12 @@ struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG
     return uvbg;
 }
 
-/* 
- * returns the spatial dependent UVBG if UV fluctuation is enabled. 
- *
- * */
-// void GetParticleUVBG(int i, struct UVBG * uvbg) {
-//     double z = 1 / All.cf.a - 1;
-//     if(All.UVRedshiftThreshold >= 0.0 && z > All.UVRedshiftThreshold) {
-//         [> if a threshold is set, disable UV bg above that redshift <]
-//         memset(uvbg, 0, sizeof(struct UVBG));
-//         return;
-//     }
-//     if(UVF.disabled) {
-//         [> directly use the TREECOOL table if UVF is disabled <]
-//         memcpy(uvbg, &GlobalUVBG, sizeof(struct UVBG));
-//         return;
-//     }
-//     double pos[3];
-//     int k;
-//     for(k = 0; k < 3; k ++) {
-//         pos[k] = P[i].Pos[k];
-//     }
-//     double zreion = interp_eval_periodic(&UVF.interp, pos, UVF.Table);
-//     if(zreion < z) {
-//         memset(uvbg, 0, sizeof(struct UVBG));
-//     } else {
-//         memcpy(uvbg, &GlobalUVBG, sizeof(struct UVBG));
-//     }
-// }
-
-void GetParticleUVBG(int i, struct UVBG * uvbg) {
+// TODO (jdavies): have some sort of flag to switch between UBVG models:
+// also, redshift and PosOffset argument not used yet
+struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset) {
     int ind[3] = {-1};
     for (int ii = 0; ii<3; ii++) {
-        ind[ii] = pos_to_ngp(P[i].Pos[ii], All.BoxSize, UVBG_DIM);
+        ind[ii] = pos_to_ngp(Pos[ii], All.BoxSize, UVBG_DIM);
     }
 
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
@@ -225,8 +198,26 @@ void GetParticleUVBG(int i, struct UVBG * uvbg) {
     uvbg->epsH0  = 5.951e-12 * J21 * 1.60218e-12;  // erg s-1
     uvbg->epsHep = 3.180e-12 * J21 * 1.60218e-12;  // erg s-1
     uvbg->epsHe0 = 6.883e-14 * J21 * 1.60218e-12;  // erg s-1
+
+    return uvbg;
 }
 
+//placeholder function so i don't have to delete old get_local_UVBG yet, or replace with a proper flag
+struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset)
+{
+    //TODO: swap hard-coded flag here for UVBG flag (global,localfromglobal,excursionset)
+    int flag_temp = 1;
+
+    if(flag_temp)
+    {
+        return _get_local_UVBG_from_J21(redshift,GlobalUVBG,Pos,PosOffset);
+    }
+    else
+    {
+        return _get_local_UVBG_from_global(redshift,Pos,PosOffset);
+
+    return uvbg;
+}
 
 /*Here comes the Metal Cooling code*/
 struct {

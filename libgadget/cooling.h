@@ -50,6 +50,10 @@ struct UVBG get_global_UVBG(double redshift);
  * This zeros the UVBG if this particular particle has not reionized yet*/
 struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset);
 
+/*UVBG from excursion set J21 grids (JDAVIES)*/
+struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset);
+struct UVBG _get_local_UVBG_from_global(double redshift, double * Pos, const double * PosOffset);
+
 /*Get the equilibrium temperature at given internal energy.
     density is total gas density in protons/cm^3
     Internal energy is in J/kg == 10^-10 ergs/g.
