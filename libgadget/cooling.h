@@ -6,6 +6,7 @@
 /* Ultra-violet background structure.
  * Can be changed on a particle-by-particle basis*/
 struct UVBG {
+    double J_UV;
     double gJH0;
     double gJHep;
     double gJHe0;

@@ -106,7 +106,7 @@ GADGET_OBJS =  \
 	 runtests.o \
 	 neutrinos_lra.o \
      omega_nu_single.o \
-	 config.o
+	 config.o \
 	 uvbg.o
 
 GADGET_UTILS_OBJS= \

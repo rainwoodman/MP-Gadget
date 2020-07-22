@@ -22,6 +22,7 @@
 #include <fftw3.h>
 #include <stdbool.h>
 #include <gsl/gsl_integration.h>
+#include <assert.h>
 
 #include "uvbg.h"
 #include "utils.h"
@@ -29,6 +30,7 @@
 #include "partmanager.h"
 #include "petapm.h"
 #include "physconst.h"
+#include "walltime.h"
 
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
@@ -265,6 +267,10 @@ static void populate_grids()
     float *buffer_stars_slab = fftwf_alloc_real((size_t)buffer_size);
     float *buffer_sfr = fftwf_alloc_real((size_t)buffer_size);
 
+    //RegionInd no longer global, allocate array for slab decomposition (Jdavies)
+    //TODO (jdavies): still find a better way to do this (with mymalloc?)
+    int *UVRegionInd = malloc(sizeof(int) * PartManager->NumPart);
+
     // I am going to reuse the RegionInd member which is from petapm.  I
     // *think* this is ok as we are doing this after the grav calculations.
     // This is a potentially stupid way to do things anyway and will most
@@ -275,9 +281,9 @@ static void populate_grids()
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if((!P[ii].IsGarbage) && (!P[ii].Swallowed) && (P[ii].Type < 5)) {
             ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0], box_size, UVBG_DIM);
-            P[ii].RegionInd = searchsorted(&ix, slab_ix_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
+            UVRegionInd[ii] = searchsorted(&ix, slab_ix_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
         } else {
-            P[ii].RegionInd = -1;
+            UVRegionInd[ii] = -1;
         }
     }
 
@@ -304,7 +310,7 @@ static void populate_grids()
         // TODO(smutch): This should become CIC
         unsigned int count_mass = 0;
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
-            if(P[ii].RegionInd == i_r) {
+            if(UVRegionInd[ii] == i_r) {
                 int ix = pos_to_ngp(P[ii].Pos[0], box_size, UVBG_DIM) - ix_start;
                 int iy = pos_to_ngp(P[ii].Pos[1], box_size, UVBG_DIM);
                 int iz = pos_to_ngp(P[ii].Pos[2], box_size, UVBG_DIM);
@@ -355,6 +361,7 @@ static void populate_grids()
 
     fftwf_free(buffer_stars_slab);
     fftwf_free(buffer_mass);
+    free(UVRegionInd);
 
     // set the last_a value so we can calulate dt for the SFR at the next call
     UVBGgrids.last_a = All.Time;

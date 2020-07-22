@@ -13,6 +13,8 @@
 #include "utils/mymalloc.h"
 #include "utils/interp.h"
 #include "utils/endrun.h"
+#include "uvbg.h"
+#include "allvars.h"
 
 static struct {
     int enabled;
@@ -172,13 +174,15 @@ struct UVBG _get_local_UVBG_from_global(double redshift, const struct UVBG * con
 // also, redshift and PosOffset argument not used yet
 struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset) {
     int ind[3] = {-1};
-    for (int ii = 0; ii<3; ii++) {
+    for (int ii = 0; ii<3; ii++)
+    {
         ind[ii] = pos_to_ngp(Pos[ii], All.BoxSize, UVBG_DIM);
     }
 
+    struct UVBG uvbg;
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
     double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], UVBG_DIM, INDEX_REAL)];
-    uvbg->J_UV = J21;
+    uvbg.J_UV = J21;
 
     // TODO(smutch): Need to confirm these are the correct quantities.
     // I had to guess by comparing the TREECOL input files to the revant source
@@ -189,15 +193,15 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
     // each run based on an alpha set in the input paramter file.
 
     // ionisation rate
-    uvbg->gJH0   = 2.090e-12 * J21; // s-1
-    uvbg->gJHep  = 5.049e-13 * J21; // s-1
+    uvbg.gJH0   = 2.090e-12 * J21; // s-1
+    uvbg.gJHep  = 5.049e-13 * J21; // s-1
 
-    uvbg->gJHe0  = 6.118e-15 * J21; // s-1
+    uvbg.gJHe0  = 6.118e-15 * J21; // s-1
         
     // photoheating rate
-    uvbg->epsH0  = 5.951e-12 * J21 * 1.60218e-12;  // erg s-1
-    uvbg->epsHep = 3.180e-12 * J21 * 1.60218e-12;  // erg s-1
-    uvbg->epsHe0 = 6.883e-14 * J21 * 1.60218e-12;  // erg s-1
+    uvbg.epsH0  = 5.951e-12 * J21 * 1.60218e-12;  // erg s-1
+    uvbg.epsHep = 3.180e-12 * J21 * 1.60218e-12;  // erg s-1
+    uvbg.epsHe0 = 6.883e-14 * J21 * 1.60218e-12;  // erg s-1
 
     return uvbg;
 }
@@ -216,7 +220,7 @@ struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG
     {
         return _get_local_UVBG_from_global(redshift,Pos,PosOffset);
 
-    return uvbg;
+    }
 }
 
 /*Here comes the Metal Cooling code*/
