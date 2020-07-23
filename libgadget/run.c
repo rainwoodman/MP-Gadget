@@ -473,6 +473,7 @@ run(int RestartSnapNum)
 
         if(!next_sync || stop) {
             /* out of sync points, or a requested stop, the run has finally finished! Yay.*/
+            //message(1,"No more sync points, stop = %d\n",stop);
             break;
         }
 

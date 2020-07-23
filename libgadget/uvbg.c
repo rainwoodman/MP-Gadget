@@ -55,13 +55,18 @@ double time_to_present(double a)
     double result;
     double abserr;
 
+    double hubble;
+    hubble = All.CP.Hubble / All.UnitTime_in_s * All.CP.HubbleParam;
+    //jdavies(second to Myr conversion)
+    double s_to_Myr = 3.17098e-14;
+
     workspace = gsl_integration_workspace_alloc(WORKSIZE);
     F.function = &integrand_time_to_present;
 
-    gsl_integration_qag(&F, a, 1.0, 1.0 / All.CP.Hubble,
+    gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
         1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
 
-    time = 1 / All.CP.Hubble * result;
+    time = 1 / hubble * result * s_to_Myr;
 
     gsl_integration_workspace_free(workspace);
 

@@ -120,13 +120,16 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     {
         double z_start = 20.;
         double a = 1.0 / (1.0 + z_start);
-
+        /*message(1,"Om = %.3f, Ol = %.3f, Ok = %.3f, H0 = %.3f, h = %.3f\n",
+                All.CP.Omega0,All.CP.OmegaLambda,All.CP.OmegaK,
+                All.CP.Hubble / All.UnitTime_in_s,All.CP.HubbleParam); */
         while (a <= All.TimeMax) {
             SyncPoints[NSyncPoints].a = a;
             SyncPoints[NSyncPoints].loga = log(a);
             SyncPoints[NSyncPoints].write_snapshot = 1;
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints++].calc_uvbg = 1;
+            //message(1,"added UVBG syncpoint at a = %.3f\n",a);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             double delta_a = 0.0001;
@@ -164,6 +167,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[j].a = a;
             SyncPoints[j].loga = loga;
             NSyncPoints ++;
+            //message(1,"added outlist syncpoint at a = %.3f\n",a);
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
@@ -183,9 +187,10 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         SyncPoints[i].ti = (i * 1L) << (TIMEBINS);
     }
 
-/*     for(i = 0; i < NSyncPoints; i++) { */
-/*         message(1,"Out: %g %ld\n", exp(SyncPoints[i].loga), SyncPoints[i].ti); */
-/*     } */
+    //message(1,"NSyncPoints = %d, OutputListLength = %d , timemax = %.3f\n",NSyncPoints,Sync.OutputListLength,All.TimeMax);
+    /*for(i = 0; i < NSyncPoints; i++) {
+        message(1,"Out: %g %ld\n", exp(SyncPoints[i].loga), SyncPoints[i].ti);
+    }*/
 }
 
 /*! this function returns the next output time that is in the future of
