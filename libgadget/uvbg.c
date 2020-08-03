@@ -551,6 +551,7 @@ static void find_HII_bubbles()
     double ReionGammaHaloBias = All.ReionGammaHaloBias;
     const double ReionNionPhotPerBary = All.ReionNionPhotPerBary;
     double alpha_uv = All.AlphaUV;
+    double EscapeFraction = All.EscapeFraction;
 
     // TODO(smutch): These should be parameters
     //double ReionRBubbleMax = 20.34; // Mpc/h
@@ -567,7 +568,7 @@ static void find_HII_bubbles()
     // and also with the inclusion of the effects of the Helium fraction.
     const double Y_He = 1.0 - HYDROGEN_MASSFRAC;
     const double BaryonFrac = All.CP.OmegaBaryon / All.CP.Omega0;
-    double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary / (1.0 - 0.75 * Y_He);
+    double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary * EscapeFraction / (1.0 - 0.75 * Y_He);
 
     bool flag_last_filter_step = false;
 
