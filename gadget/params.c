@@ -330,14 +330,14 @@ create_gadget_parameter_set()
     /*End parameters for the massive neutrino model*/
 
     /*Parameters for the Excursion Set Algorithm*/
-    param_declare_int(ps, "UBVGdim", OPTIONAL, 64, "Side length of the excursion set grid");
-    param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20.34, "Maximum radius of excursion set filters in Mpc/h");
-    param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 0.4068, "Minimum radius of excursion set filters in Mpc/h");
-    param_declare_double(ps, "ReionDeltaRFactor", OPTIONAL, 1.1, "Fractional difference between excursion set bubble sizes");
-    param_declare_double(ps, "ReionGammaHaloBias", OPTIONAL, 2.0, "Halo Bias for calculating J21");
-    param_declare_double(ps, "ReionNionPhotPerBary", OPTIONAL, 4000., "Photons produced per stellar baryon");
-    param_declare_double(ps, "AlphaUV", OPTIONAL, 3., "Spectral slope of ionising radiation above the Hydrogen ionisation threshold");
-    param_declare_double(ps, "EscapeFraction", OPTIONAL, 1., "Constant escape fraction of ionising photons from galaxies");
+    param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Side length of the excursion set grid.");
+    param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20.34, "Maximum radius of excursion set filters in Mpc/h.");
+    param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 0.4068, "Minimum radius of excursion set filters in Mpc/h.");
+    param_declare_double(ps, "ReionDeltaRFactor", OPTIONAL, 1.1, "Fractional difference between excursion set bubble sizes.");
+    param_declare_double(ps, "ReionGammaHaloBias", OPTIONAL, 2.0, "Halo Bias for calculating J21.");
+    param_declare_double(ps, "ReionNionPhotPerBary", OPTIONAL, 4000., "Photons produced per stellar baryon.");
+    param_declare_double(ps, "AlphaUV", OPTIONAL, 3., "Spectral slope of ionising radiation above the Hydrogen ionisation threshold.");
+    param_declare_double(ps, "EscapeFraction", OPTIONAL, 1., "Constant escape fraction of ionising photons from galaxies.");
     /*End Parameters for the Excursion Set Algorithm*/
 
     param_set_action(ps, "BlackHoleFeedbackMethod", BlackHoleFeedbackMethodAction, NULL);
