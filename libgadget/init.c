@@ -115,6 +115,17 @@ set_init_params(ParameterSet * ps)
             endrun(2, "You have enabled (kspace) massive neutrinos without radiation, but this will give an inconsistent cosmology!\n");
         /*End massive neutrino parameters*/
 
+        /*Parameters for the Excursion Set Algorithm*/
+        All.UVBGdim = param_get_int(ps, "UBVGdim");
+        All.ReionRBubbleMax = param_get_double(ps, "ReionRBubbleMax");
+        All.ReionRBubbleMin = param_get_double(ps, "ReionRBubbleMin");
+        All.ReionDeltaRFactor = param_get_double(ps, "ReionDeltaRFactor");
+        All.ReionGammaHaloBias = param_get_double(ps, "ReionGammaHaloBias");
+        All.ReionNionPhotPerBary = param_get_double(ps, "ReionNionPhotPerBary");
+        All.AlphaUV = param_get_double(ps, "AlphaUV");
+        All.EscapeFraction = param_get_double(ps, "EscapeFraction");
+        /*End Parameters for the Excursion Set Algorithm*/
+
         if(All.StarformationOn == 0)
         {
             if(All.WindOn == 1) {

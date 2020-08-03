@@ -176,12 +176,12 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
     int ind[3] = {-1};
     for (int ii = 0; ii<3; ii++)
     {
-        ind[ii] = pos_to_ngp(Pos[ii], All.BoxSize, UVBG_DIM);
+        ind[ii] = pos_to_ngp(Pos[ii], All.BoxSize, All.UVBGdim);
     }
 
     struct UVBG uvbg;
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
-    double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], UVBG_DIM, INDEX_REAL)];
+    double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], All.UVBGdim, INDEX_REAL)];
     uvbg.J_UV = J21;
 
     // TODO(smutch): Need to confirm these are the correct quantities.

@@ -138,6 +138,17 @@ extern struct global_data_all_processes
     int SnapshotWithFOF; /*Flag that doing FOF for snapshot outputs is on*/
 
     int RandomSeed; /*Initial seed for the random number table*/
+    
+    /*Parameters for the Excursion Set Algorithm*/
+    int UVBGdim;
+    double ReionRBubbleMax;
+    double ReionRBubbleMin;
+    double ReionDeltaRFactor;
+    double ReionGammaHaloBias;
+    double ReionNionPhotPerBary;
+    double AlphaUV;
+    double EscapeFraction;
+    /*End Parameters for the Excursion Set Algorithm*/
 }
 All;
 
