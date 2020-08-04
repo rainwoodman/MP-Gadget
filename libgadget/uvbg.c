@@ -278,7 +278,7 @@ static void populate_grids()
 
     //RegionInd no longer global, allocate array for slab decomposition (Jdavies)
     //TODO (jdavies): still find a better way to do this (with mymalloc?)
-    int *UVRegionInd = malloc(sizeof(int) * PartManager->NumPart);
+    int *UVRegionInd = mymalloc("UVRegionInd",sizeof(int) * PartManager->NumPart);
 
     // I am going to reuse the RegionInd member which is from petapm.  I
     // *think* this is ok as we are doing this after the grav calculations.
@@ -370,7 +370,7 @@ static void populate_grids()
 
     fftwf_free(buffer_stars_slab);
     fftwf_free(buffer_mass);
-    free(UVRegionInd);
+    myfree(UVRegionInd);
 
     // set the last_a value so we can calulate dt for the SFR at the next call
     UVBGgrids.last_a = All.Time;
