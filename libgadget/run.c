@@ -463,6 +463,7 @@ run(int RestartSnapNum)
         if(CalcUVBG) {
             calculate_uvbg();
         }
+        message(0,"uvbg calculated\n");
 
 
         write_cpu_log(NumCurrentTiStep, FdCPU);    /* produce some CPU usage info */
