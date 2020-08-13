@@ -272,7 +272,6 @@ inttime_t init(int RestartSnapNum, DomainDecomp * ddecomp)
     if(All.DensityOn)
         setup_smoothinglengths(RestartSnapNum, ddecomp, Ti_Current);
 
-    malloc_permanent_uvbg_grids();
     return Ti_Current;
 }
 
