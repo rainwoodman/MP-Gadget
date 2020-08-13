@@ -91,17 +91,22 @@ static void assign_slabs()
     ptrdiff_t local_n_complex = fftwf_mpi_local_size_3d(uvbg_dim, uvbg_dim, uvbg_dim / 2 + 1, MPI_COMM_WORLD, &local_nix, &local_ix_start);
 
     // let every rank know...
-    ptrdiff_t* slab_nix = mymalloc("slab_nix",sizeof(ptrdiff_t) * n_ranks); ///< array of number of x cells of every rank
+    //ptrdiff_t* slab_nix = mymalloc("slab_nix",sizeof(ptrdiff_t) * n_ranks); ///< array of number of x cells of every rank
+    ptrdiff_t* slab_nix = malloc(sizeof(ptrdiff_t) * n_ranks); ///< array of number of x cells of every rank
     UVBGgrids.slab_nix = slab_nix;
     MPI_Allgather(&local_nix, sizeof(ptrdiff_t), MPI_BYTE, slab_nix, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
 
-    ptrdiff_t *slab_ix_start = mymalloc("slab_ix_start",sizeof(ptrdiff_t) * n_ranks); ///< array first x cell of every rank
+    //ptrdiff_t *slab_ix_start = mymalloc("slab_ix_start",sizeof(ptrdiff_t) * n_ranks); ///< array first x cell of every rank
+    ptrdiff_t *slab_ix_start = malloc(sizeof(ptrdiff_t) * n_ranks); ///< array first x cell of every rank
     UVBGgrids.slab_ix_start = slab_ix_start;
     slab_ix_start[0] = 0;
     for (int ii = 1; ii < n_ranks; ii++)
+    {
         slab_ix_start[ii] = slab_ix_start[ii - 1] + slab_nix[ii - 1];
-
-    ptrdiff_t *slab_n_complex = mymalloc("slab_n_complex",sizeof(ptrdiff_t) * n_ranks); ///< array of allocation counts for every rank
+        message(0,"rank %d got slab size %d starting at %d\n",ii,slab_nix[ii],slab_ix_start[ii]);
+    }
+    //ptrdiff_t *slab_n_complex = mymalloc("slab_n_complex",sizeof(ptrdiff_t) * n_ranks); ///< array of allocation counts for every rank
+    ptrdiff_t *slab_n_complex = malloc(sizeof(ptrdiff_t) * n_ranks); ///< array of allocation counts for every rank
     UVBGgrids.slab_n_complex = slab_n_complex;
     MPI_Allgather(&local_n_complex, sizeof(ptrdiff_t), MPI_BYTE, slab_n_complex, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
 }
@@ -114,8 +119,10 @@ void malloc_permanent_uvbg_grids()
 
     // Note that these are full grids stored on every rank!
     // (jdavies) putting these on the top for now to detect mismatched free earlier
-    UVBGgrids.J21 = mymalloc2("J21", sizeof(float) * grid_n_real);
-    UVBGgrids.stars = mymalloc2("stars", sizeof(float) * grid_n_real);
+    //UVBGgrids.J21 = mymalloc2("J21", sizeof(float) * grid_n_real);
+    //UVBGgrids.stars = mymalloc2("stars", sizeof(float) * grid_n_real);
+    UVBGgrids.J21 = malloc(sizeof(float) * grid_n_real);
+    UVBGgrids.stars = malloc(sizeof(float) * grid_n_real);
 
     for(size_t ii=0; ii < grid_n_real; ii++) {
         UVBGgrids.J21[ii] = 0.0f;
@@ -127,8 +134,10 @@ void malloc_permanent_uvbg_grids()
 
 void free_permanent_uvbg_grids()
 {
-    myfree(UVBGgrids.stars);
-    myfree(UVBGgrids.J21);
+    //myfree(UVBGgrids.stars);
+    //myfree(UVBGgrids.J21);
+    free(UVBGgrids.stars);
+    free(UVBGgrids.J21);
 }
 
 static void malloc_grids()
@@ -161,9 +170,12 @@ static void malloc_grids()
 
 static void free_grids()
 {
-    myfree(UVBGgrids.slab_n_complex);
-    myfree(UVBGgrids.slab_ix_start);
-    myfree(UVBGgrids.slab_nix);
+    //myfree(UVBGgrids.slab_n_complex);
+    //myfree(UVBGgrids.slab_ix_start);
+    //myfree(UVBGgrids.slab_nix);
+    free(UVBGgrids.slab_n_complex);
+    free(UVBGgrids.slab_ix_start);
+    free(UVBGgrids.slab_nix);
 
 
     fftwf_free(UVBGgrids.J21_at_ionization);
@@ -765,6 +777,60 @@ static void find_HII_bubbles()
     
 }
 
+void save_uvbg_grids()
+{
+    int n_ranks;
+    int this_rank=-1;
+    int uvbg_dim = All.UVBGdim;
+    int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+    MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+    //TODO(jdavies): a better write function, probably using petaio stuff
+    //These grids should have been reduced onto all ranks
+    if(this_rank == 0)
+    {
+        BigFile fout;
+        char fname[256];
+        sprintf(fname, "output/UVgrids_%.2f", All.Time);
+        big_file_create(&fout, fname);
+
+        //J21 block
+        BigBlock block;
+        big_file_create_block(&fout, &block, "J21", "=f4", 1, 1, (size_t[]){grid_n_real});
+        BigArray arr = {0};
+        big_array_init(&arr, UVBGgrids.J21, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+        BigBlockPtr ptr = {0};
+        big_block_write(&block, &ptr, &arr);
+        big_block_close(&block);
+
+        message(0,"saved J21\n");
+
+        //xHI grid is in slabs
+        /*//xHI block
+        BigBlock block2;
+        big_file_create_block(&fout, &block2, "xHI", "=f4", 1, 1, (size_t[]){grid_n_real});
+        BigArray arr2 = {0};
+        big_array_init(&arr2, UVBGgrids.xHI, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+        BigBlockPtr ptr2 = {0};
+        big_block_write(&block2, &ptr2, &arr2);
+        big_block_close(&block2);
+
+        message(0,"saved XHI\n");*/
+
+        //stars block
+        BigBlock block3;
+        big_file_create_block(&fout, &block3, "stars", "=f4", 1, 1, (size_t[]){grid_n_real});
+        BigArray arr3 = {0};
+        big_array_init(&arr3, UVBGgrids.stars, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+        BigBlockPtr ptr3 = {0};
+        big_block_write(&block3, &ptr3, &arr3);
+        big_block_close(&block3);
+
+        big_file_close(&fout);
+
+        message(0,"saved stars\n");
+   }
+}
 
 void calculate_uvbg()
 {
@@ -809,6 +875,7 @@ void calculate_uvbg()
     find_HII_bubbles();
 
     walltime_measure("/UVBG/find_HII_bubbles");
+    save_uvbg_grids();
 
     destroy_plans();
     free_grids();

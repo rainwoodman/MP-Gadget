@@ -104,7 +104,9 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
 
     if(NSyncPoints > 0)
         myfree(SyncPoints);
-    SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2));
+    //TODO(Jdavies): don't use syncpoints for uvbg calculation, or figure out how many are there beforehand
+    //z=20 to z=4 is ~150 syncpoints at 10 Myr spaces
+    SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2+200)); 
 
     /* Set up first and last entry to SyncPoints; TODO we can insert many more! */
 
@@ -114,33 +116,38 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
     SyncPoints[0].write_fof = 0;
     SyncPoints[0].calc_uvbg = 0;
-    NSyncPoints = 1;
 
     // UVBG calculation every 10 Myr from z=20
     {
         double z_start = 20.;
-        double a = 1.0 / (1.0 + z_start);
+        double uv_a = 1.0 / (1.0 + z_start);
         /*message(1,"Om = %.3f, Ol = %.3f, Ok = %.3f, H0 = %.3f, h = %.3f\n",
                 All.CP.Omega0,All.CP.OmegaLambda,All.CP.OmegaK,
                 All.CP.Hubble / All.UnitTime_in_s,All.CP.HubbleParam); */
-        while (a <= All.TimeMax) {
-            SyncPoints[NSyncPoints].a = a;
-            SyncPoints[NSyncPoints].loga = log(a);
-            SyncPoints[NSyncPoints].write_snapshot = 1;
+        while (uv_a <= All.TimeMax) {
+            SyncPoints[NSyncPoints].a = uv_a;
+            SyncPoints[NSyncPoints].loga = log(uv_a);
+            SyncPoints[NSyncPoints].write_snapshot = 0;
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints++].calc_uvbg = 1;
-            //message(1,"added UVBG syncpoint at a = %.3f\n",a);
+            //message(0,"added UVBG syncpoint at a = %.3f\n",uv_a);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             double delta_a = 0.0001;
-            double lbt = time_to_present(a);
+            double lbt = time_to_present(uv_a);
             double delta_lbt = 0.0;
-            while ((delta_lbt <= 10.0) && (a <= All.TimeMax)) {
-                a += delta_a;
-                delta_lbt = lbt - time_to_present(a);
+            while ((delta_lbt <= 10.0) && (uv_a <= All.TimeMax)) {
+                uv_a += delta_a;
+                delta_lbt = lbt - time_to_present(uv_a);
             }
         }
     }
+    
+    SyncPoints[1].a = All.TimeMax;
+    SyncPoints[1].loga = log(All.TimeMax);
+    SyncPoints[1].write_snapshot = 1;
+    SyncPoints[1].write_fof = 0;
+    NSyncPoints = 2;
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
     for(i = 0; i < Sync.OutputListLength; i ++) {
@@ -167,7 +174,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[j].a = a;
             SyncPoints[j].loga = loga;
             NSyncPoints ++;
-            //message(1,"added outlist syncpoint at a = %.3f\n",a);
+            //message(0,"added outlist syncpoint at a = %.3f, j = %d, Ns = %d\n",a,j,NSyncPoints);
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;

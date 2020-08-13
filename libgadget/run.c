@@ -465,6 +465,11 @@ run(int RestartSnapNum)
         }
         message(0,"uvbg calculated\n");
 
+        //message(0,"JD: a=%.3f, WriteFoF=%d, WriteSnapshot=%d, CalcUVBG=%d\n",All.Time,WriteFOF,WriteSnapshot,CalcUVBG);
+        /*if(planned_sync && next_sync)
+        {
+            message(0,"JD: this a=%.3f, next a=%d\n",planned_sync->a,next_sync->a);
+        }*/
 
         write_cpu_log(NumCurrentTiStep, FdCPU);    /* produce some CPU usage info */
 
