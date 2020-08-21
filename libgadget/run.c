@@ -462,6 +462,9 @@ run(int RestartSnapNum)
         
         if(CalcUVBG) {
             calculate_uvbg();
+            if(WriteSnapshot) {
+                save_uvbg_grids(SnapshotFileCount);
+            }
         }
         message(0,"uvbg calculated\n");
 

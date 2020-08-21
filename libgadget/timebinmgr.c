@@ -186,7 +186,8 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         } else {
             SyncPoints[j].write_snapshot = 0;
             SyncPoints[j].write_fof = 0;
-            SyncPoints[j].calc_uvbg = 0;
+            //TODO(jdavies): put a flag here
+            SyncPoints[j].calc_uvbg = 1;
         }
     }
 

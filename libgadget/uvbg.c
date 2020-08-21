@@ -343,8 +343,8 @@ static void populate_grids()
         else
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
-        MPI_Reduce(buffer_stars_slab, UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        MPI_Reduce(buffer_sfr, UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         
         // TODO(smutch): These could perhaps be precalculated?
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
@@ -557,13 +557,6 @@ static void find_HII_bubbles()
     double alpha_uv = All.AlphaUV;
     double EscapeFraction = All.EscapeFraction;
 
-    // TODO(smutch): These should be parameters
-    //double ReionRBubbleMax = 20.34; // Mpc/h
-    //double ReionRBubbleMin = 0.4068; // Mpc/h
-    //double ReionDeltaRFactor = 1.1;
-    //float ReionGammaHaloBias = 2.0f;
-    //const double ReionNionPhotPerBary = 4000.;
-    
     double R = fmin(ReionRBubbleMax, cell_length_factor * box_size); // Mpc/h
 
     // TODO(smutch): tidy this up!
@@ -575,6 +568,10 @@ static void find_HII_bubbles()
     double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary * EscapeFraction / (1.0 - 0.75 * Y_He);
 
     bool flag_last_filter_step = false;
+    
+    //(jdavies) J21 total debug variables
+    double total_J21 = 0.;
+    double max_coll = 0.;
 
     while (!flag_last_filter_step) {
         // check to see if this is our last filtering step
@@ -600,7 +597,7 @@ static void find_HII_bubbles()
         // inverse fourier transform back to real space
         fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, deltax_filtered, (float*)deltax_filtered);
         fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, stars_slab_filtered, (float*)stars_slab_filtered);
-        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, (float*)stars_slab_filtered);
+        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, (float*)sfr_filtered);
 
         // Perform sanity checks to account for aliasing effects
         for (int ix = 0; ix < local_nix; ix++)
@@ -609,7 +606,7 @@ static void find_HII_bubbles()
                     i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                     ((float*)stars_slab_filtered)[i_padded] = fmaxf(((float*)stars_slab_filtered)[i_padded], 0.0f);
-                    ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], -1 + FLOAT_REL_TOL);
+                    ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], 0.0f);
                 }
 
 
@@ -650,10 +647,6 @@ static void find_HII_bubbles()
         // }
         // ============================================================================================================
 
-
-        // TODO(smutch): Make this a parameter
-        //const double alpha_uv = 3;  // UV spectral slope
-
         const double J21_aux_constant = (1.0 + redshift) * (1.0 + redshift) / (4.0 * M_PI)
             * alpha_uv * PLANCK * 1e21
             * R * All.UnitLength_in_cm * ReionNionPhotPerBary / PROTONMASS
@@ -675,13 +668,16 @@ static void find_HII_bubbles()
 
                     const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
+                    max_coll = fmax(f_coll_stars,max_coll);
+
                     // Check if ionised!
-                    if (f_coll_stars > 1.0 / ReionEfficiency) // IONISED!!!!
+                    if (f_coll_stars > (1.0 / ReionEfficiency)) // IONISED!!!!
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
                         if (xHI[i_real] > FLOAT_REL_TOL) {
                             const int i_grid_real = grid_index(ix + local_ix_start, iy, iz, uvbg_dim, INDEX_REAL);
                             J21[i_grid_real] = J21_aux;
+                            total_J21 += J21_aux;
                         }
 
                         // Mark as ionised
@@ -742,6 +738,8 @@ static void find_HII_bubbles()
     double volume_weighted_global_xHI = 0.0;
     double mass_weighted_global_xHI = 0.0;
     double mass_weight = 0.0;
+    double total_stars = 0.0;
+    int ionised_cells = 0;
 
     for (int ix = 0; ix < local_nix; ix++)
         for (int iy = 0; iy < uvbg_dim; iy++)
@@ -752,20 +750,33 @@ static void find_HII_bubbles()
                 density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
                 mass_weighted_global_xHI += (double)(xHI[i_real]) * density_over_mean;
                 mass_weight += density_over_mean;
+                total_stars += (double)((float*)stars_slab_filtered)[i_padded];
+                ionised_cells += xHI[i_real] < 0.1;
             }
 
     MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &total_stars, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &total_J21, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_coll, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &ionised_cells, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
     volume_weighted_global_xHI /= total_n_cells;
     mass_weighted_global_xHI /= mass_weight;
     UVBGgrids.volume_weighted_global_xHI = (float)volume_weighted_global_xHI;
     UVBGgrids.mass_weighted_global_xHI = (float)mass_weighted_global_xHI;
-    
+
+    message(0,"vol weighted xhi : %f\n",volume_weighted_global_xHI);
+    message(0,"mass weighted xhi : %f\n",mass_weighted_global_xHI);
+    message(0,"sum of stars : %f\n",total_stars);
+    message(0,"sum of J21 : %f\n",total_J21);
+    message(0,"Reionefficiency : %f\n",ReionEfficiency);
+    message(0,"max collapsed frac : %f\n",max_coll);
+    message(0,"ionised cells : %d\n",ionised_cells);
 }
 
-void save_uvbg_grids()
+void save_uvbg_grids(int SnapshotFileCount)
 {
     int n_ranks;
     int this_rank=-1;
@@ -773,13 +784,25 @@ void save_uvbg_grids()
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+
+    //malloc new grid for star grid reduction on one rank
+    //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
+    float* star_buffer;
+    if(this_rank == 0)
+    {
+        star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
+    }
+    MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+
     //TODO(jdavies): a better write function, probably using petaio stuff
     //These grids should have been reduced onto all ranks
     if(this_rank == 0)
     {
+
         BigFile fout;
         char fname[256];
-        sprintf(fname, "output/UVgrids_%.2f", All.Time);
+        sprintf(fname, "%s/UVgrids_%03d", All.OutputDir,SnapshotFileCount);
+        message(0, "saving uv grids to %s \n", fname);
         big_file_create(&fout, fname);
 
         //J21 block
@@ -809,13 +832,14 @@ void save_uvbg_grids()
         BigBlock block3;
         big_file_create_block(&fout, &block3, "stars", "=f4", 1, 1, (size_t[]){grid_n_real});
         BigArray arr3 = {0};
-        big_array_init(&arr3, UVBGgrids.stars, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+        big_array_init(&arr3, star_buffer, "=f4", 1, (size_t[]){grid_n_real}, NULL);
         BigBlockPtr ptr3 = {0};
         big_block_write(&block3, &ptr3, &arr3);
         big_block_close(&block3);
 
         big_file_close(&fout);
 
+        myfree(star_buffer);
         message(0,"saved stars\n");
    }
 }
@@ -863,7 +887,6 @@ void calculate_uvbg()
     find_HII_bubbles();
 
     walltime_measure("/UVBG/find_HII_bubbles");
-    save_uvbg_grids();
 
     destroy_plans();
     free_grids();
