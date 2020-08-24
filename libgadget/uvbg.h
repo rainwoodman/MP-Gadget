@@ -8,10 +8,9 @@ struct UVBGgrids_type {
     ptrdiff_t *slab_ix_start;
     ptrdiff_t *slab_n_complex;
     
-    union {
-        float *J21;
-        float *prev_stars;
-    };
+    float *J21;
+    float *prev_stars;
+
     float *stars;
 
     float *deltax;

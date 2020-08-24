@@ -117,6 +117,7 @@ void malloc_permanent_uvbg_grids()
     // Note that these are full grids stored on every rank!
     UVBGgrids.J21 = mymalloc("J21", sizeof(float) * grid_n_real);
     UVBGgrids.stars = mymalloc("stars", sizeof(float) * grid_n_real);
+    UVBGgrids.prev_stars = mymalloc("stars", sizeof(float) * grid_n_real);
 
     for(size_t ii=0; ii < grid_n_real; ii++) {
         UVBGgrids.J21[ii] = 0.0f;
@@ -124,10 +125,14 @@ void malloc_permanent_uvbg_grids()
     for(size_t ii=0; ii < grid_n_real; ii++) {
         UVBGgrids.stars[ii] = 0.0f;
     }
+    for(size_t ii=0; ii < grid_n_real; ii++) {
+        UVBGgrids.prev_stars[ii] = 0.0f;
+    }
 }
 
 void free_permanent_uvbg_grids()
 {
+    myfree(UVBGgrids.prev_stars);
     myfree(UVBGgrids.stars);
     myfree(UVBGgrids.J21);
 }
@@ -312,11 +317,6 @@ static void populate_grids()
             buffer_sfr[ii] = (float)0.;
         }
 
-        // copy the current stellar mass grid so we can work out the SFRs
-        // WATCH OUT: prev_stars is a union with J21 to save memory.  Until
-        // find_HII_bubbles is called again, J21 will be invalid!
-        const size_t grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
-        memcpy(UVBGgrids.prev_stars, UVBGgrids.stars, sizeof(float) * grid_n_real);
 
         // fill the local buffer for this slab
         // TODO(smutch): This should become CIC
@@ -377,7 +377,11 @@ static void populate_grids()
 
     // set the last_a value so we can calulate dt for the SFR at the next call
     UVBGgrids.last_a = All.Time;
-
+    // copy the current stellar mass grid so we can work out the SFRs
+    // WATCH OUT: prev_stars is a union with J21 to save memory.  Until
+    // find_HII_bubbles is called again, J21 will be invalid!
+    const size_t grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+    memcpy(UVBGgrids.prev_stars, UVBGgrids.stars, sizeof(float) * grid_n_real);
 }
 
 
@@ -791,6 +795,10 @@ void save_uvbg_grids(int SnapshotFileCount)
     if(this_rank == 0)
     {
         star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
+        for(int ii=0;ii<grid_n_real;ii++)
+        {
+            star_buffer[ii] = 0.0;
+        }
     }
     MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 

@@ -116,6 +116,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
     SyncPoints[0].write_fof = 0;
     SyncPoints[0].calc_uvbg = 0;
+    NSyncPoints = 1;
 
     // UVBG calculation every 10 Myr from z=20
     {
@@ -147,7 +148,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     SyncPoints[1].loga = log(All.TimeMax);
     SyncPoints[1].write_snapshot = 1;
     SyncPoints[1].write_fof = 0;
-    NSyncPoints = 2;
+    NSyncPoints++;
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
     for(i = 0; i < Sync.OutputListLength; i ++) {
@@ -178,6 +179,8 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
+            //TODO(jdavies): put a flag here
+            SyncPoints[j].calc_uvbg = 1;
             if(SnapshotWithFOF) {
                 SyncPoints[j].write_fof = 1;
             }
@@ -186,8 +189,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         } else {
             SyncPoints[j].write_snapshot = 0;
             SyncPoints[j].write_fof = 0;
-            //TODO(jdavies): put a flag here
-            SyncPoints[j].calc_uvbg = 1;
+            SyncPoints[j].calc_uvbg = 0;
         }
     }
 
