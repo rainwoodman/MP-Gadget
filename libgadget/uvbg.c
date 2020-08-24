@@ -798,6 +798,14 @@ void save_uvbg_grids(int SnapshotFileCount)
         for(int ii=0;ii<grid_n_real;ii++)
         {
             star_buffer[ii] = 0.0;
+            if(SnapshotFileCount==6 && UVBGgrids.stars[ii] > 1e-5)
+            {
+                message(0,"star grid = %f at %d\n",UVBGgrids.stars[ii],ii);
+            }
+            if(SnapshotFileCount==6 && UVBGgrids.J21[ii] > 1e-5)
+            {
+                message(0,"J21 grid = %f at %d\n",UVBGgrids.J21[ii],ii);
+            }
         }
     }
     MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);

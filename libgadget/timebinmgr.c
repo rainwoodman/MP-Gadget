@@ -106,7 +106,8 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         myfree(SyncPoints);
     //TODO(Jdavies): don't use syncpoints for uvbg calculation, or figure out how many are there beforehand
     //z=20 to z=4 is ~150 syncpoints at 10 Myr spaces
-    SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2+200)); 
+    //
+    SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2+400)); 
 
     /* Set up first and last entry to SyncPoints; TODO we can insert many more! */
 
@@ -131,7 +132,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[NSyncPoints].write_snapshot = 0;
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints++].calc_uvbg = 1;
-            //message(0,"added UVBG syncpoint at a = %.3f\n",uv_a);
+            message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             double delta_a = 0.0001;
@@ -144,10 +145,10 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         }
     }
     
-    SyncPoints[1].a = All.TimeMax;
-    SyncPoints[1].loga = log(All.TimeMax);
-    SyncPoints[1].write_snapshot = 1;
-    SyncPoints[1].write_fof = 0;
+    SyncPoints[NSyncPoints].a = All.TimeMax;
+    SyncPoints[NSyncPoints].loga = log(All.TimeMax);
+    SyncPoints[NSyncPoints].write_snapshot = 1;
+    SyncPoints[NSyncPoints].write_fof = 0;
     NSyncPoints++;
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
@@ -175,7 +176,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[j].a = a;
             SyncPoints[j].loga = loga;
             NSyncPoints ++;
-            //message(0,"added outlist syncpoint at a = %.3f, j = %d, Ns = %d\n",a,j,NSyncPoints);
+            message(0,"added outlist syncpoint at a = %.3f, j = %d, Ns = %d\n",a,j,NSyncPoints);
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
