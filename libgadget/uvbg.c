@@ -46,6 +46,7 @@ double integrand_time_to_present(double a, void *dummy)
     return 1 / sqrt(omega_m / a + omega_k + omega_lambda * a * a);
 }
 
+//time_to_present in Myr
 double time_to_present(double a)
 {
 #define WORKSIZE 1000
@@ -117,7 +118,7 @@ void malloc_permanent_uvbg_grids()
     // Note that these are full grids stored on every rank!
     UVBGgrids.J21 = mymalloc("J21", sizeof(float) * grid_n_real);
     UVBGgrids.stars = mymalloc("stars", sizeof(float) * grid_n_real);
-    UVBGgrids.prev_stars = mymalloc("stars", sizeof(float) * grid_n_real);
+    UVBGgrids.prev_stars = mymalloc("prev_stars", sizeof(float) * grid_n_real);
 
     for(size_t ii=0; ii < grid_n_real; ii++) {
         UVBGgrids.J21[ii] = 0.0f;
@@ -348,10 +349,10 @@ static void populate_grids()
         
         // TODO(smutch): These could perhaps be precalculated?
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
-        message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt) * All.UnitTime_in_s / SEC_PER_MEGAYEAR);
+        message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt));
 
         for(int ii=0; ii < buffer_size; ii++) {
-            buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt;
+            buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt / All.UnitTime_in_Megayears;
         }
 
         if (this_rank == i_r) {
@@ -789,6 +790,8 @@ void save_uvbg_grids(int SnapshotFileCount)
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
+    int starcount=0;
+    int jcount=0;
     //malloc new grid for star grid reduction on one rank
     //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
     float* star_buffer;
@@ -798,15 +801,18 @@ void save_uvbg_grids(int SnapshotFileCount)
         for(int ii=0;ii<grid_n_real;ii++)
         {
             star_buffer[ii] = 0.0;
-            if(SnapshotFileCount==6 && UVBGgrids.stars[ii] > 1e-5)
+            if(UVBGgrids.stars[ii] > 0.0)
             {
-                message(0,"star grid = %f at %d\n",UVBGgrids.stars[ii],ii);
+                starcount++;
+                //message(0,"star grid = %f at %d\n",UVBGgrids.stars[ii],ii);
             }
-            if(SnapshotFileCount==6 && UVBGgrids.J21[ii] > 1e-5)
+            if(UVBGgrids.J21[ii] > 0.0)
             {
-                message(0,"J21 grid = %f at %d\n",UVBGgrids.J21[ii],ii);
+                jcount++;
+                //message(0,"J21 grid = %f at %d\n",UVBGgrids.J21[ii],ii);
             }
         }
+        message(0,"%d nonzero star cells, %d nonzero j21 cells\n",starcount,jcount);
     }
     MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
@@ -903,6 +909,8 @@ void calculate_uvbg()
     find_HII_bubbles();
 
     walltime_measure("/UVBG/find_HII_bubbles");
+    //debug :save checkpoint to snap 999
+    save_uvbg_grids(999);
 
     destroy_plans();
     free_grids();

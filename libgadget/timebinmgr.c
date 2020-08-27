@@ -110,8 +110,8 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2+400)); 
 
     /* Set up first and last entry to SyncPoints; TODO we can insert many more! */
-
-    // TODO(smutch): Add sync points for the UVBG calculation
+    //NOTE(jdavies): these first syncpoints need to be in order
+   
     SyncPoints[0].a = TimeIC;
     SyncPoints[0].loga = log(TimeIC);
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
@@ -135,6 +135,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
+            // TODO(jdavies): fix low-z where delta_a > 10Myr
             double delta_a = 0.0001;
             double lbt = time_to_present(uv_a);
             double delta_lbt = 0.0;

@@ -192,6 +192,9 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
     // Code will need to be added to calculate these values at the start of
     // each run based on an alpha set in the input paramter file.
 
+    //TODO:(jdavies) check if helium should be ionised here (once/twice)
+    //uvbg.self_shield_dens = GlobalUVBG.self_shield_dens;
+
     // ionisation rate
     uvbg.gJH0   = 2.090e-12 * J21; // s-1
     uvbg.gJHep  = 5.049e-13 * J21; // s-1
@@ -202,6 +205,8 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
     uvbg.epsH0  = 5.951e-12 * J21 * 1.60218e-12;  // erg s-1
     uvbg.epsHep = 3.180e-12 * J21 * 1.60218e-12;  // erg s-1
     uvbg.epsHe0 = 6.883e-14 * J21 * 1.60218e-12;  // erg s-1
+
+    uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
 
     return uvbg;
 }

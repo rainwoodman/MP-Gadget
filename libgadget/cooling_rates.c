@@ -240,8 +240,8 @@ get_photo_rate(double redshift, struct itp_type * Gamma_tab)
   At higher redshifts than this was computed,
   we keep the self-shielding density constant. In reality the reionization model should take over.
 */
-static double
-self_shield_dens(double redshift, const struct UVBG * uvbg)
+double
+get_self_shield_dens(double redshift, const struct UVBG * uvbg)
 {
     /*Before the UVBG switches on, no need for self-shielding*/
     if(uvbg->gJH0 == 0)
@@ -283,7 +283,7 @@ struct UVBG get_global_UVBG(double redshift)
         GlobalUVBG.epsHep = 0;
     else
         GlobalUVBG.epsHep = get_photo_rate(redshift, &Eps_HeII);
-    GlobalUVBG.self_shield_dens = self_shield_dens(redshift, &GlobalUVBG);
+    GlobalUVBG.self_shield_dens = get_self_shield_dens(redshift, &GlobalUVBG);
     return GlobalUVBG;
 }
 

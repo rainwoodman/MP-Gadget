@@ -113,4 +113,7 @@ double get_neutral_fraction_phys_cgs(double density, double ienergy, double heli
 /* Get the helium ionic fractions at a temperature and density. Same conventions as above*/
 double get_helium_ion_phys_cgs(int ion, double density, double ienergy, double helium, const struct UVBG * uvbg, double ne_init);
 
+/* get self_shielding density from uvbg (added to .h by jdavies or uvfluc) */
+double get_self_shield_dens(double redshift, const struct UVBG * uvbg);
+
 #endif
