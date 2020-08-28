@@ -401,6 +401,34 @@ cooling_direct(int i, const double a3inv, const double hubble, const struct UVBG
 
     double redshift = 1./All.Time - 1;
     struct UVBG uvbg = get_local_UVBG(redshift, GlobalUVBG, P[i].Pos, PartManager->CurrentParticleOffset);
+
+    //(jdavies) debugging messages
+    struct UVBG uvbg_test;
+    if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
+    {
+        uvbg_test = _get_local_UVBG_from_global(redshift,P[i].Pos,PartManager->CurrentParticleOffset);
+        message(0,"-----excursion set-----\n");
+        message(0,"J_UV = %e\n",uvbg.J_UV);
+        message(0,"gJH0 = %e\n",uvbg.gJH0);
+        message(0,"gJHep = %e\n",uvbg.gJHep);
+        message(0,"gJHe0 = %e\n",uvbg.gJHe0);
+        message(0,"epsH0 = %e\n",uvbg.epsH0);
+        message(0,"epsHep = %e\n",uvbg.epsHep);
+        message(0,"epsHe0 = %e\n",uvbg.epsHe0);
+        message(0,"ssdens = %e\n",uvbg.self_shield_dens);
+        message(0,"-----global uv-----\n");
+        message(0,"J_UV = %e\n",uvbg_test.J_UV);
+        message(0,"gJH0 = %e\n",uvbg_test.gJH0);
+        message(0,"gJHep = %e\n",uvbg_test.gJHep);
+        message(0,"gJHe0 = %e\n",uvbg_test.gJHe0);
+        message(0,"epsH0 = %e\n",uvbg_test.epsH0);
+        message(0,"epsHep = %e\n",uvbg_test.epsHep);
+        message(0,"epsHe0 = %e\n",uvbg_test.epsHe0);
+        message(0,"ssdens = %e\n",uvbg_test.self_shield_dens);
+
+        UVBGgrids.debug_printed = 1;
+    }
+
     double unew = DoCooling(redshift, uold, SPHP(i).Density * a3inv, dtime, &uvbg, &ne, SPHP(i).Metallicity, All.MinEgySpec, P[i].HeIIIionized);
 
     SPHP(i).Ne = ne;
@@ -539,10 +567,13 @@ static int make_particle_star(int child, int parent, int placement)
     // TODO(smutch): Use CIC
     int coord[3] = {0};
     for(int ii=0; ii<3; ii++) {
-        coord[ii] = pos_to_ngp(P[child].Pos[2], All.BoxSize, All.UVBGdim);
+        coord[ii] = pos_to_ngp(P[child].Pos[ii], All.BoxSize, All.UVBGdim);
     }
 
     // TODO(smutch): Is this the correct mass to use, or should we be using the result of `find_star_mass`?
+    // TODO(jdavies) account for drift in previous snapshots (populate each snap with mass?)
+    // would have to re-make the union with J21 and reset the prev_stars stuff
+    // or is this intentional, since where stars formed is more important for the reionisation field?
     UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], All.UVBGdim, INDEX_REAL)] += P[child].Mass;
 
     return retflag;

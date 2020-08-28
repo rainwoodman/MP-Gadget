@@ -744,6 +744,7 @@ static void find_HII_bubbles()
     double mass_weighted_global_xHI = 0.0;
     double mass_weight = 0.0;
     double total_stars = 0.0;
+    double total_stars_u = 0.0;
     int ionised_cells = 0;
 
     for (int ix = 0; ix < local_nix; ix++)
@@ -756,6 +757,7 @@ static void find_HII_bubbles()
                 mass_weighted_global_xHI += (double)(xHI[i_real]) * density_over_mean;
                 mass_weight += density_over_mean;
                 total_stars += (double)((float*)stars_slab_filtered)[i_padded];
+                total_stars_u += (double)(stars_slab[i_padded]);
                 ionised_cells += xHI[i_real] < 0.1;
             }
 
@@ -763,6 +765,7 @@ static void find_HII_bubbles()
     MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &total_stars, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &total_stars_u, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &total_J21, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &max_coll, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ionised_cells, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
@@ -775,6 +778,7 @@ static void find_HII_bubbles()
     message(0,"vol weighted xhi : %f\n",volume_weighted_global_xHI);
     message(0,"mass weighted xhi : %f\n",mass_weighted_global_xHI);
     message(0,"sum of stars : %f\n",total_stars);
+    message(0,"sum of stars in unfiltered slabs: %f\n",total_stars_u);
     message(0,"sum of J21 : %f\n",total_J21);
     message(0,"Reionefficiency : %f\n",ReionEfficiency);
     message(0,"max collapsed frac : %f\n",max_coll);
@@ -791,7 +795,9 @@ void save_uvbg_grids(int SnapshotFileCount)
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
     int starcount=0;
+    double startotal=0.;
     int jcount=0;
+    double jtotal=0.;
     //malloc new grid for star grid reduction on one rank
     //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
     float* star_buffer;
@@ -801,20 +807,29 @@ void save_uvbg_grids(int SnapshotFileCount)
         for(int ii=0;ii<grid_n_real;ii++)
         {
             star_buffer[ii] = 0.0;
-            if(UVBGgrids.stars[ii] > 0.0)
+        }
+    }
+    MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+    //both star_buffer and J21 grids have been reduced onto all ranks, so no reduction of the stats is necessary
+    if(this_rank == 0)
+    {
+        for(int ii=0;ii<grid_n_real;ii++)
+        {
+            if(star_buffer[ii] > 0.0)
             {
                 starcount++;
-                //message(0,"star grid = %f at %d\n",UVBGgrids.stars[ii],ii);
+                startotal += star_buffer[ii];
+                //message(0,"star grid = %f at %d\n",star_buffer[ii],ii);
             }
             if(UVBGgrids.J21[ii] > 0.0)
             {
                 jcount++;
+                jtotal += UVBGgrids.J21[ii];
                 //message(0,"J21 grid = %f at %d\n",UVBGgrids.J21[ii],ii);
             }
         }
-        message(0,"%d nonzero star cells, %d nonzero j21 cells\n",starcount,jcount);
+        message(0,"%d nonzero star cells, %d nonzero j21 cells, %f total stars, %f total mass\n",starcount,jcount,startotal,jtotal);
     }
-    MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
 
     //TODO(jdavies): a better write function, probably using petaio stuff
     //These grids should have been reduced onto all ranks
@@ -907,6 +922,9 @@ void calculate_uvbg()
 
     message(0, "Away to call find_HII_bubbles...\n");
     find_HII_bubbles();
+    
+    //TODO(jdavies):remove this
+    UVBGgrids.debug_printed = 0;
 
     walltime_measure("/UVBG/find_HII_bubbles");
     //debug :save checkpoint to snap 999

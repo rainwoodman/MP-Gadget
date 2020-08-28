@@ -30,6 +30,10 @@ struct UVBGgrids_type {
 
     float volume_weighted_global_xHI;
     float mass_weighted_global_xHI;
+
+    //TODO(jdavies): remove this
+    //this is a check for debug messages so i don't print them a million times
+    int debug_printed;
 };
 
 extern struct UVBGgrids_type UVBGgrids; 
