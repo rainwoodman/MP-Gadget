@@ -132,7 +132,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[NSyncPoints].write_snapshot = 0;
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints].calc_uvbg = 1;
-            Nsyncpoints++;
+            NSyncPoints++;
             message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
