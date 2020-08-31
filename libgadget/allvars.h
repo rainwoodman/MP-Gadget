@@ -141,6 +141,7 @@ extern struct global_data_all_processes
     
     /*Parameters for the Excursion Set Algorithm*/
     int UVBGdim;
+    int ExcursionSetFlag;
     double ReionRBubbleMax;
     double ReionRBubbleMin;
     double ReionDeltaRFactor;

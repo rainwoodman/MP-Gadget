@@ -460,7 +460,7 @@ run(int RestartSnapNum)
             fof_finish(&fof);
         }
         
-        if(CalcUVBG) {
+        if(All.ExcursionSetFlag && CalcUVBG) {
             calculate_uvbg();
             if(WriteSnapshot) {
                 save_uvbg_grids(SnapshotFileCount);

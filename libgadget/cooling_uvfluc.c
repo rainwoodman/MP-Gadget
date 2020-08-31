@@ -214,10 +214,7 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
 //placeholder function so i don't have to delete old get_local_UVBG yet, or replace with a proper flag
 struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset)
 {
-    //TODO: swap hard-coded flag here for UVBG flag (global,localfromglobal,excursionset)
-    int flag_temp = 1;
-
-    if(flag_temp)
+    if(All.ExcursionSetFlag)
     {
         return _get_local_UVBG_from_J21(redshift,GlobalUVBG,Pos,PosOffset);
     }

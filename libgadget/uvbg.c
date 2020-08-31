@@ -25,6 +25,7 @@
 #include <assert.h>
 
 #include "uvbg.h"
+#include "cosmology.h"
 #include "utils.h"
 #include "allvars.h"
 #include "partmanager.h"
@@ -57,9 +58,8 @@ double time_to_present(double a)
     double abserr;
 
     double hubble;
-    hubble = All.CP.Hubble / All.UnitTime_in_s * All.CP.HubbleParam;
+    hubble = All.CP.Hubble / All.UnitTime_in_Megayears * All.CP.HubbleParam;
     //jdavies(second to Myr conversion)
-    double s_to_Myr = 3.17098e-14;
 
     workspace = gsl_integration_workspace_alloc(WORKSIZE);
     F.function = &integrand_time_to_present;
@@ -67,7 +67,7 @@ double time_to_present(double a)
     gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
         1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
 
-    time = 1 / hubble * result * s_to_Myr;
+    time = 1 / hubble * result;
 
     gsl_integration_workspace_free(workspace);
 
@@ -512,6 +512,9 @@ static void find_HII_bubbles()
     int i_padded = 0;
     const double redshift = 1.0 / (All.Time) - 1.;
 
+    double hubble_time;
+    hubble_time = hubble_function(&All.CP,All.Time);
+
     // This parameter choice is sensitive to noise on the cell size, at least for the typical
     // cell sizes in RT simulations. It probably doesn't matter for larger cell sizes.
     if ((box_size / (double)uvbg_dim) < 1.0) // Fairly arbitrary length based on 2 runs Sobacchi did
@@ -576,6 +579,8 @@ static void find_HII_bubbles()
     
     //(jdavies) J21 total debug variables
     double total_J21 = 0.;
+    double min_J21 = 1000.; //surely the minimum nonzero will be less than 1000
+    double max_J21 = 0.; 
     double max_coll = 0.;
 
     while (!flag_last_filter_step) {
@@ -669,7 +674,10 @@ static void find_HII_bubbles()
                     f_coll_stars = (double)((float*)stars_slab_filtered)[i_padded] / (RtoM(R) * density_over_mean)
                         * (4.0 / 3.0) * M_PI * pow(R, 3.0) / pixel_volume;
 
-                    sfr_density = (double)((float*)sfr_filtered)[i_padded] / pixel_volume; // In internal units
+                    //TODO(jdavies): NOT THE ACTUAL SFR DENSITY, the rates functions don't work well with the bursty sfr
+                    //this is total cumulative sfr smoothed over hubble time
+                    sfr_density = (double)((float*)stars_slab_filtered)[i_padded] / hubble_time / pixel_volume; // In internal units
+                    //sfr_density = (double)((float*)sfr_filtered)[i_padded] / pixel_volume; // In internal units
 
                     const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
@@ -683,6 +691,11 @@ static void find_HII_bubbles()
                             const int i_grid_real = grid_index(ix + local_ix_start, iy, iz, uvbg_dim, INDEX_REAL);
                             J21[i_grid_real] = J21_aux;
                             total_J21 += J21_aux;
+                            if(J21_aux > 0.0)
+                            {
+                                min_J21 = (J21_aux < min_J21) ? J21_aux : min_J21;
+                                max_J21 = (J21_aux > max_J21) ? J21_aux : max_J21;
+                            }
                         }
 
                         // Mark as ionised
@@ -767,6 +780,8 @@ static void find_HII_bubbles()
     MPI_Allreduce(MPI_IN_PLACE, &total_stars, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &total_stars_u, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &total_J21, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_J21, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &max_coll, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ionised_cells, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
@@ -780,9 +795,13 @@ static void find_HII_bubbles()
     message(0,"sum of stars : %f\n",total_stars);
     message(0,"sum of stars in unfiltered slabs: %f\n",total_stars_u);
     message(0,"sum of J21 : %f\n",total_J21);
+    message(0,"nonzero minimum of J21 : %e\n",min_J21);
+    message(0,"nonzero maximum of J21 : %e\n",max_J21);
     message(0,"Reionefficiency : %f\n",ReionEfficiency);
     message(0,"max collapsed frac : %f\n",max_coll);
     message(0,"ionised cells : %d\n",ionised_cells);
+    message(0,"Hubble check in sim units : %e\n", hubble_time);
+    message(0,"Hubble check in seconds : %e\n", hubble_time / All.UnitTime_in_s);
 }
 
 void save_uvbg_grids(int SnapshotFileCount)
@@ -828,7 +847,7 @@ void save_uvbg_grids(int SnapshotFileCount)
                 //message(0,"J21 grid = %f at %d\n",UVBGgrids.J21[ii],ii);
             }
         }
-        message(0,"%d nonzero star cells, %d nonzero j21 cells, %f total stars, %f total mass\n",starcount,jcount,startotal,jtotal);
+        message(0,"%d nonzero star cells, %d nonzero j21 cells, %f total stars, %f total j21\n",starcount,jcount,startotal,jtotal);
     }
 
     //TODO(jdavies): a better write function, probably using petaio stuff

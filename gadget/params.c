@@ -330,6 +330,7 @@ create_gadget_parameter_set()
     /*End parameters for the massive neutrino model*/
 
     /*Parameters for the Excursion Set Algorithm*/
+    param_declare_int(ps, "ExcursionSetFlag", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
     param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Side length of the excursion set grid.");
     param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20.34, "Maximum radius of excursion set filters in Mpc/h.");
     param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 0.4068, "Minimum radius of excursion set filters in Mpc/h.");

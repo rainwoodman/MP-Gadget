@@ -116,6 +116,7 @@ set_init_params(ParameterSet * ps)
         /*End massive neutrino parameters*/
 
         /*Parameters for the Excursion Set Algorithm*/
+        All.ExcursionSetFlag = param_get_int(ps, "ExcursionSetFlag");
         All.UVBGdim = param_get_int(ps, "UVBGdim");
         All.ReionRBubbleMax = param_get_double(ps, "ReionRBubbleMax");
         All.ReionRBubbleMin = param_get_double(ps, "ReionRBubbleMin");

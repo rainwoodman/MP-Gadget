@@ -262,7 +262,8 @@ void petaio_read_internal(char * fname, int ic, struct IOTable * IOTable, MPI_Co
     int64_t NLocal[6];
 
     /*Allocate Permanent UV grids*/
-    malloc_permanent_uvbg_grids();
+    if(All.ExcursionSetFlag)
+        malloc_permanent_uvbg_grids();
 
     int NLocal[6];
     for(ptype = 0; ptype < 6; ptype ++) {
