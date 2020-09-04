@@ -402,33 +402,6 @@ cooling_direct(int i, const double a3inv, const double hubble, const struct UVBG
     double redshift = 1./All.Time - 1;
     struct UVBG uvbg = get_local_UVBG(redshift, GlobalUVBG, P[i].Pos, PartManager->CurrentParticleOffset);
 
-    //(jdavies) debugging messages, print's first particle's UVBG from each model
-    struct UVBG uvbg_test;
-    if(!UVBGgrids.debug_printed && uvbg.gJH0 > 0)
-    {
-        uvbg_test = _get_local_UVBG_from_global(redshift,P[i].Pos,PartManager->CurrentParticleOffset);
-        message(0,"-----main UVBG for one particle-----\n");
-        message(0,"J_UV = %e\n",uvbg.J_UV);
-        message(0,"gJH0 = %e\n",uvbg.gJH0);
-        message(0,"gJHep = %e\n",uvbg.gJHep);
-        message(0,"gJHe0 = %e\n",uvbg.gJHe0);
-        message(0,"epsH0 = %e\n",uvbg.epsH0);
-        message(0,"epsHep = %e\n",uvbg.epsHep);
-        message(0,"epsHe0 = %e\n",uvbg.epsHe0);
-        message(0,"ssdens = %e\n",uvbg.self_shield_dens);
-        message(0,"-----global uv for same particle-----\n");
-        message(0,"J_UV = %e\n",uvbg_test.J_UV);
-        message(0,"gJH0 = %e\n",uvbg_test.gJH0);
-        message(0,"gJHep = %e\n",uvbg_test.gJHep);
-        message(0,"gJHe0 = %e\n",uvbg_test.gJHe0);
-        message(0,"epsH0 = %e\n",uvbg_test.epsH0);
-        message(0,"epsHep = %e\n",uvbg_test.epsHep);
-        message(0,"epsHe0 = %e\n",uvbg_test.epsHe0);
-        message(0,"ssdens = %e\n",uvbg_test.self_shield_dens);
-
-        UVBGgrids.debug_printed = 1;
-    }
-
     double unew = DoCooling(redshift, uold, SPHP(i).Density * a3inv, dtime, &uvbg, &ne, SPHP(i).Metallicity, All.MinEgySpec, P[i].HeIIIionized);
 
     SPHP(i).Ne = ne;

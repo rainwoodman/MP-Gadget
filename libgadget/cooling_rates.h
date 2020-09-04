@@ -116,4 +116,7 @@ double get_helium_ion_phys_cgs(int ion, double density, double ienergy, double h
 /* get self_shielding density from uvbg (added to .h by jdavies or uvfluc) */
 double get_self_shield_dens(double redshift, const struct UVBG * uvbg);
 
+/* get ionrate coefficients for excursion set*/
+struct J21_coeffs get_J21_coeffs(double alpha);
+
 #endif

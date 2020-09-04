@@ -126,6 +126,9 @@ load_tree_value(char ** saveptr)
     where 'Gamma' is the photoionization rate and 'Qdot' is the photoheating rate.
     The Gamma's are in units of s^-1, and the Qdot's are in units of erg s^-1.
 */
+/* (Jdavies) If the excursion set is enabled, this will instead read the same rate
+ *  coefficients * (for J21 == 1) as a function of spectral slope instead of redshift
+ *  */
 static void
 load_treecool(const char * TreeCoolFile)
 {
@@ -191,6 +194,13 @@ load_treecool(const char * TreeCoolFile)
             Eps_HI.ydata[i]     = load_tree_value(&saveptr)+ CoolingParams.HydrogenHeatAmp;
             Eps_HeI.ydata[i]    = load_tree_value(&saveptr);
             Eps_HeII.ydata[i]   = load_tree_value(&saveptr);
+            message(0,"-----coeffs for alpha = %.3f\n",Gamma_log1z[i]);
+            message(0,"gJH0 = %e\n",Gamma_HI.ydata[i]);
+            message(0,"gJHep = %e\n",Gamma_HeI.ydata[i]);
+            message(0,"gJHe0 = %e\n",Gamma_HeII.ydata[i]);
+            message(0,"epsH0 = %e\n",Eps_HI.ydata[i]);
+            message(0,"epsHep = %e\n",Eps_HeI.ydata[i]);
+            message(0,"epsHe0 = %e\n",Eps_HeII.ydata[i]);
             i++;
         }
 
@@ -285,6 +295,41 @@ struct UVBG get_global_UVBG(double redshift)
         GlobalUVBG.epsHep = get_photo_rate(redshift, &Eps_HeII);
     GlobalUVBG.self_shield_dens = get_self_shield_dens(redshift, &GlobalUVBG);
     return GlobalUVBG;
+}
+
+/*Get photo ionization rate coeff*/
+/*TODO(jdavies): this is very similar to get_photo_rate, and only one is used, find a way to combine*/
+/*would need to change z to log(1+z) input in photorate and remove 10^x*/
+static double
+get_photorate_coeff(double alpha, struct itp_type * Gamma_tab)
+{
+    if(!CoolingParams.PhotoIonizationOn)
+        return 0;
+    double photo_rate;
+    if (alpha >= Gamma_log1z[NTreeCool - 1])
+        return 0;
+    else if (alpha < Gamma_log1z[0])
+        photo_rate = Gamma_tab->ydata[0];
+    else {
+        photo_rate = gsl_interp_eval(Gamma_tab->intp, Gamma_log1z, Gamma_tab->ydata, alpha, NULL);
+    }
+    //pow 10 here because the treecool load does log10
+    return pow(10,photo_rate) * CoolingParams.PhotoIonizeFactor;
+}
+
+/* gets J21==1 rates from interpolation tables*/
+/*TODO(jdavies): combine with get_global_UVBG somehow*/
+struct J21_coeffs get_J21_coeffs(double alpha)
+{
+    struct J21_coeffs J21toUV;
+    J21toUV.gJH0 = get_photorate_coeff(alpha, &Gamma_HI);
+    J21toUV.gJHe0 = get_photorate_coeff(alpha, &Gamma_HeI);
+    J21toUV.gJHep = get_photorate_coeff(alpha, &Gamma_HeII);
+
+    J21toUV.epsH0 = get_photorate_coeff(alpha, &Eps_HI);
+    J21toUV.epsHe0 = get_photorate_coeff(alpha, &Eps_HeI);
+    J21toUV.epsHep = get_photorate_coeff(alpha, &Eps_HeII);
+    return J21toUV;
 }
 
 /*Correction to the photoionisation rate as a function of density from Rahmati 2012, eq. 14.
@@ -978,6 +1023,7 @@ init_cooling_rates(const char * TreeCoolFile, const char * MetalCoolFile, Cosmol
         message(0, "Using uniform UVB from file %s\n", TreeCoolFile);
         /* Load the TREECOOL into Gamma_HI->ydata, and initialise the interpolators*/
         load_treecool(TreeCoolFile);
+        //TODO (jdavies): replace this with different file argument instead of re-using treecool
     }
 
     /*Initialize the recombination tables*/

@@ -140,7 +140,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             double delta_a = 0.0001;
             double lbt = time_to_present(uv_a);
             double delta_lbt = 0.0;
-            while ((delta_lbt <= 10.0) && (uv_a <= All.TimeMax)) {
+            while ((delta_lbt <= All.UVBGTimestep) && (uv_a <= All.TimeMax)) {
                 uv_a += delta_a;
                 delta_lbt = lbt - time_to_present(uv_a);
             }

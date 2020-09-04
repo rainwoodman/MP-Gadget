@@ -149,6 +149,9 @@ extern struct global_data_all_processes
     double ReionNionPhotPerBary;
     double AlphaUV;
     double EscapeFraction;
+    double UVBGTimestep;
+    int ReionFilterType;
+    int UVBGSaveGrids;
     /*End Parameters for the Excursion Set Algorithm*/
 }
 All;

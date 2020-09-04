@@ -388,7 +388,7 @@ static void populate_grids()
 
 static void filter(fftwf_complex* box, const int local_ix_start, const int slab_nx, const int grid_dim, const float R)
 {
-    const int filter_type = 0;  // TODO(smutch): Make this an option
+    const int filter_type = All.ReionFilterType;
     int middle = grid_dim / 2;
     float box_size = (float)All.BoxSize;
     float delta_k = (float)(2.0 * M_PI / box_size);
@@ -579,9 +579,9 @@ static void find_HII_bubbles()
     
     //(jdavies) J21 total debug variables
     double total_J21 = 0.;
-    double min_J21 = 1000.; //surely the minimum nonzero will be less than 1000
+    /*double min_J21 = 1000.; //surely the minimum nonzero will be less than 1000
     double max_J21 = 0.; 
-    double max_coll = 0.;
+    double max_coll = 0.;*/
 
     while (!flag_last_filter_step) {
         // check to see if this is our last filtering step
@@ -681,7 +681,7 @@ static void find_HII_bubbles()
 
                     const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
-                    max_coll = fmax(f_coll_stars,max_coll);
+                    //max_coll = fmax(f_coll_stars,max_coll);
 
                     // Check if ionised!
                     if (f_coll_stars > (1.0 / ReionEfficiency)) // IONISED!!!!
@@ -691,11 +691,11 @@ static void find_HII_bubbles()
                             const int i_grid_real = grid_index(ix + local_ix_start, iy, iz, uvbg_dim, INDEX_REAL);
                             J21[i_grid_real] = J21_aux;
                             total_J21 += J21_aux;
-                            if(J21_aux > 0.0)
+                            /*if(J21_aux > 0.0)
                             {
                                 min_J21 = (J21_aux < min_J21) ? J21_aux : min_J21;
                                 max_J21 = (J21_aux > max_J21) ? J21_aux : max_J21;
-                            }
+                            }*/
                         }
 
                         // Mark as ionised
@@ -757,7 +757,6 @@ static void find_HII_bubbles()
     double mass_weighted_global_xHI = 0.0;
     double mass_weight = 0.0;
     double total_stars = 0.0;
-    double total_stars_u = 0.0;
     int ionised_cells = 0;
 
     for (int ix = 0; ix < local_nix; ix++)
@@ -770,7 +769,7 @@ static void find_HII_bubbles()
                 mass_weighted_global_xHI += (double)(xHI[i_real]) * density_over_mean;
                 mass_weight += density_over_mean;
                 total_stars += (double)((float*)stars_slab_filtered)[i_padded];
-                total_stars_u += (double)(stars_slab[i_padded]);
+                //total_stars_u += (double)(stars_slab[i_padded]);
                 ionised_cells += xHI[i_real] < 0.1;
             }
 
@@ -778,12 +777,11 @@ static void find_HII_bubbles()
     MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &total_stars, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &total_stars_u, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &total_J21, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &max_J21, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &max_coll, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ionised_cells, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    /*MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_J21, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_coll, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);*/
 
     volume_weighted_global_xHI /= total_n_cells;
     mass_weighted_global_xHI /= mass_weight;
@@ -793,15 +791,14 @@ static void find_HII_bubbles()
     message(0,"vol weighted xhi : %f\n",volume_weighted_global_xHI);
     message(0,"mass weighted xhi : %f\n",mass_weighted_global_xHI);
     message(0,"sum of stars : %f\n",total_stars);
-    message(0,"sum of stars in unfiltered slabs: %f\n",total_stars_u);
     message(0,"sum of J21 : %f\n",total_J21);
-    message(0,"nonzero minimum of J21 : %e\n",min_J21);
+    message(0,"ionised cells : %d\n",ionised_cells);
+    /*message(0,"nonzero minimum of J21 : %e\n",min_J21);
     message(0,"nonzero maximum of J21 : %e\n",max_J21);
     message(0,"Reionefficiency : %f\n",ReionEfficiency);
     message(0,"max collapsed frac : %f\n",max_coll);
-    message(0,"ionised cells : %d\n",ionised_cells);
     message(0,"Hubble check in sim units : %e\n", hubble_time);
-    message(0,"Hubble check in seconds : %e\n", hubble_time / All.UnitTime_in_s);
+    message(0,"Hubble check in seconds : %e\n", hubble_time / All.UnitTime_in_s);*/
 }
 
 void save_uvbg_grids(int SnapshotFileCount)
@@ -813,10 +810,10 @@ void save_uvbg_grids(int SnapshotFileCount)
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
-    int starcount=0;
+    /*int starcount=0;
     double startotal=0.;
     int jcount=0;
-    double jtotal=0.;
+    double jtotal=0.;*/
     //malloc new grid for star grid reduction on one rank
     //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
     float* star_buffer;
@@ -830,7 +827,7 @@ void save_uvbg_grids(int SnapshotFileCount)
     }
     MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
     //both star_buffer and J21 grids have been reduced onto all ranks, so no reduction of the stats is necessary
-    if(this_rank == 0)
+    /*if(this_rank == 0)
     {
         for(int ii=0;ii<grid_n_real;ii++)
         {
@@ -848,7 +845,7 @@ void save_uvbg_grids(int SnapshotFileCount)
             }
         }
         message(0,"%d nonzero star cells, %d nonzero j21 cells, %f total stars, %f total j21\n",starcount,jcount,startotal,jtotal);
-    }
+    }*/
 
     //TODO(jdavies): a better write function, probably using petaio stuff
     //These grids should have been reduced onto all ranks
@@ -946,8 +943,9 @@ void calculate_uvbg()
     UVBGgrids.debug_printed = 0;
 
     walltime_measure("/UVBG/find_HII_bubbles");
+    
     //debug :save checkpoint to snap 999
-    save_uvbg_grids(999);
+    //save_uvbg_grids(999);
 
     destroy_plans();
     free_grids();

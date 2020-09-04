@@ -16,6 +16,16 @@ struct UVBG {
     double self_shield_dens;
 };
 
+/*rates for excursion set, for J21 == 1*/
+struct J21_coeffs {
+    double gJH0;
+    double gJHep;
+    double gJHe0;
+    double epsH0;
+    double epsHep;
+    double epsHe0;
+};
+
 /*Global unit system for the cooling module*/
 struct cooling_units
 {

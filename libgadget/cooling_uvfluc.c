@@ -179,10 +179,13 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
         ind[ii] = pos_to_ngp(Pos[ii], All.BoxSize, All.UVBGdim);
     }
 
-    struct UVBG uvbg;
+    struct UVBG uvbg = {0};
+    
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
     double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], All.UVBGdim, INDEX_REAL)];
     uvbg.J_UV = J21;
+
+    //TODO(if local alpha desired, set J21 coeffs here with set_J21_coeffs(alpha)
 
     // TODO(smutch): Need to confirm these are the correct quantities.
     // I had to guess by comparing the TREECOL input files to the revant source
@@ -193,20 +196,51 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
     // each run based on an alpha set in the input paramter file.
 
     //TODO:(jdavies) check if helium should be ionised here (once/twice)
-    //uvbg.self_shield_dens = GlobalUVBG.self_shield_dens;
+    //TODO:(jdavies) also check helium heating because there is a special case in the code
+    
+    //interpolators in cooling_rates.c should now be rate coeffs
+    //it seems a bit wasteful to calculate this for every particle
+    //but the global uv does an interpolation every time and this allows
+    //for future inhomogeneous alpha
+    struct J21_coeffs J21toUV = get_J21_coeffs(All.AlphaUV);
 
     // ionisation rate
-    uvbg.gJH0   = 2.090e-12 * J21; // s-1
-    uvbg.gJHep  = 5.049e-13 * J21; // s-1
+    uvbg.gJH0   = J21toUV.gJH0 * J21; // s-1
+    uvbg.gJHep  = J21toUV.gJHep * J21; // s-1
 
-    uvbg.gJHe0  = 6.118e-15 * J21; // s-1
+    uvbg.gJHe0  = J21toUV.gJHe0 * J21; // s-1
         
     // photoheating rate
-    uvbg.epsH0  = 5.951e-12 * J21 * 1.60218e-12;  // erg s-1
-    uvbg.epsHep = 3.180e-12 * J21 * 1.60218e-12;  // erg s-1
-    uvbg.epsHe0 = 6.883e-14 * J21 * 1.60218e-12;  // erg s-1
+    uvbg.epsH0  = J21toUV.epsH0 * J21 * 1.60218e-12;  // erg s-1
+   
+    uvbg.epsHep = J21toUV.epsHep * J21 * 1.60218e-12;  // erg s-1
+    uvbg.epsHe0 = J21toUV.epsHe0 * J21 * 1.60218e-12;  // erg s-1
 
     uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
+
+    //(jdavies) debugging messages, print's first particle's UVBG from each model
+    if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
+    {
+        message(0,"-----main UVBG for one particle-----\n");
+        message(0,"J_UV = %e\n",uvbg.J_UV);
+        message(0,"gJH0 = %e\n",uvbg.gJH0);
+        message(0,"gJHep = %e\n",uvbg.gJHep);
+        message(0,"gJHe0 = %e\n",uvbg.gJHe0);
+        message(0,"epsH0 = %e\n",uvbg.epsH0);
+        message(0,"epsHep = %e\n",uvbg.epsHep);
+        message(0,"epsHe0 = %e\n",uvbg.epsHe0);
+        message(0,"ssdens = %e\n",uvbg.self_shield_dens);
+
+        message(0,"-----coeffs for alpha = %.3f\n",All.AlphaUV);
+        message(0,"gJH0 = %e\n",J21toUV.gJH0);
+        message(0,"gJHep = %e\n",J21toUV.gJHep);
+        message(0,"gJHe0 = %e\n",J21toUV.gJHe0);
+        message(0,"epsH0 = %e\n",J21toUV.epsH0);
+        message(0,"epsHep = %e\n",J21toUV.epsHep);
+        message(0,"epsHe0 = %e\n",J21toUV.epsHe0);
+
+        UVBGgrids.debug_printed = 1;
+    }
 
     return uvbg;
 }
