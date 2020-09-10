@@ -59,11 +59,7 @@ struct UVBG get_global_UVBG(double redshift);
 
 /* Change the ultra-violet background table according to a pre-computed table of UV fluctuations.
  * This zeros the UVBG if this particular particle has not reionized yet*/
-struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset);
-
-/*UVBG from excursion set J21 grids (JDAVIES)*/
-struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset);
-struct UVBG _get_local_UVBG_from_global(double redshift, double * Pos, const double * PosOffset);
+struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset, int heiiionized);
 
 /*Get the equilibrium temperature at given internal energy.
     density is total gas density in protons/cm^3

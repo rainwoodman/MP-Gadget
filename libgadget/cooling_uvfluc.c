@@ -172,7 +172,7 @@ struct UVBG _get_local_UVBG_from_global(double redshift, const struct UVBG * con
 
 // TODO (jdavies): have some sort of flag to switch between UBVG models:
 // also, redshift and PosOffset argument not used yet
-struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset) {
+static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset, int heiiionized) {
     int ind[3] = {-1};
     for (int ii = 0; ii<3; ii++)
     {
@@ -202,8 +202,7 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
     uvbg.epsHe0 = J21toUV.epsHe0 * J21 * 1.60218e-12;  // erg s-1
 
     //TODO:put a flag here or utilise the Upton-Sanderbeck code in cooling_qso_lightup.c to tell if heii is ionised
-    int heliumii = 0;
-    if(heliumii){
+    if(heiiionized){
         uvbg.gJHep  = J21toUV.gJHep * J21; // s-1
         uvbg.epsHep = J21toUV.epsHep * J21 * 1.60218e-12;  // erg s-1
     }
@@ -237,16 +236,16 @@ struct UVBG _get_local_UVBG_from_J21(double redshift, double * Pos, const double
 }
 
 //placeholder function so i don't have to delete old get_local_UVBG yet, or replace with a proper flag
-struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset)
+struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, int heiiionized)
 {
     if(All.ExcursionSetFlag)
     {
-        return _get_local_UVBG_from_J21(redshift,GlobalUVBG,Pos,PosOffset);
+        return get_local_UVBG_from_J21(redshift,Pos,PosOffset,heiiionized);
     }
     else
     {
-        return _get_local_UVBG_from_global(redshift,Pos,PosOffset);
-
+        //(jdavies): I'm assuming the global UVBG properly deals with heii ionization, although i could modify it
+        return get_local_UVBG_from_global(redshift,GlobalUVBG,Pos,PosOffset);
     }
 }
 
