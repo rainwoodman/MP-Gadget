@@ -611,7 +611,7 @@ nHe_internal(double nh, double logt, double ne, const struct UVBG * uvbg, double
     }
     else {
         He.nHep = 0;
-        He.nHe0 = 1;
+        He.nHe0 = nh;
         He.nHepp = 0;
     }
     return He;
