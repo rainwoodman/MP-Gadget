@@ -332,6 +332,8 @@ create_gadget_parameter_set()
     /*Parameters for the Excursion Set Algorithm*/
     param_declare_int(ps, "ExcursionSetFlag", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
     param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Side length of the excursion set grid.");
+    param_declare_int(ps, "UVBGSaveGrids", OPTIONAL, 1, "Flag to save reionisation grids.");
+    param_declare_int(ps, "ReionFilterType", OPTIONAL, 0., "Filter type for Excursion set");
     param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20.34, "Maximum radius of excursion set filters in Mpc/h.");
     param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 0.4068, "Minimum radius of excursion set filters in Mpc/h.");
     param_declare_double(ps, "ReionDeltaRFactor", OPTIONAL, 1.1, "Fractional difference between excursion set bubble sizes.");
@@ -339,6 +341,7 @@ create_gadget_parameter_set()
     param_declare_double(ps, "ReionNionPhotPerBary", OPTIONAL, 4000., "Photons produced per stellar baryon.");
     param_declare_double(ps, "AlphaUV", OPTIONAL, 3., "Spectral slope of ionising radiation above the Hydrogen ionisation threshold.");
     param_declare_double(ps, "EscapeFraction", OPTIONAL, 1., "Constant escape fraction of ionising photons from galaxies.");
+    param_declare_double(ps, "UVBGTimestep", OPTIONAL, 10., "Time in Myr between UVBG calculations.");
     /*End Parameters for the Excursion Set Algorithm*/
 
     param_set_action(ps, "BlackHoleFeedbackMethod", BlackHoleFeedbackMethodAction, NULL);

@@ -296,6 +296,8 @@ static void populate_grids()
     // all of the particles to find out what slab they sit on, and then loop
     // through all particles again n_slab times!
     double box_size = All.BoxSize;
+
+    #pragma omp parallel for
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if((!P[ii].IsGarbage) && (!P[ii].Swallowed) && (P[ii].Type < 5)) {
             ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim);
@@ -322,6 +324,7 @@ static void populate_grids()
         // fill the local buffer for this slab
         // TODO(smutch): This should become CIC
         unsigned int count_mass = 0;
+        #pragma omp parallel for reduction(+:count_mass)
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(UVRegionInd[ii] == i_r) {
                 int ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - ix_start;
@@ -330,7 +333,9 @@ static void populate_grids()
 
                 int ind = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
 
+                #pragma omp atomic update
                 buffer_mass[ind] += P[ii].Mass;
+
                 count_mass++;
             }
         }
@@ -351,6 +356,7 @@ static void populate_grids()
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
         message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt));
 
+        #pragma omp parallel for
         for(int ii=0; ii < buffer_size; ii++) {
             buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt / All.UnitTime_in_Megayears;
         }
@@ -358,6 +364,7 @@ static void populate_grids()
         if (this_rank == i_r) {
             const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
             const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
+            #pragma omp parallel for collapse(3)
             for (int ix = 0; ix < slab_nix[i_r]; ix++)
                 for (int iy = 0; iy < uvbg_dim; iy++)
                     for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -394,6 +401,8 @@ static void filter(fftwf_complex* box, const int local_ix_start, const int slab_
     float delta_k = (float)(2.0 * M_PI / box_size);
 
     // Loop through k-box
+    // (jdavies): outer loop ONLY threaded here, not perfectly nested
+    #pragma omp parallel for
     for (int n_x = 0; n_x < slab_nx; n_x++) {
         float k_x;
         int n_x_global = n_x + local_ix_start;
@@ -505,11 +514,14 @@ static void find_HII_bubbles()
     int local_nix = (int)(UVBGgrids.slab_nix[this_rank]);
     int slab_n_real = local_nix * uvbg_dim * uvbg_dim;
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+    
+    //MAKE SURE THESE ARE PRIVATE IN THREADED LOOPS
     double density_over_mean = 0;
     double sfr_density = 0;
     double f_coll_stars = 0;
     int i_real = 0;
     int i_padded = 0;
+    
     const double redshift = 1.0 / (All.Time) - 1.;
 
     double hubble_time;
@@ -521,6 +533,7 @@ static void find_HII_bubbles()
         cell_length_factor = 1.0;
 
     // Init J21 and xHI
+    // TODO: i could add threading here but the overhead might be more than array initialization
     float* xHI = UVBGgrids.xHI;
     for (int ii = 0; ii < slab_n_real; ii++) {
         xHI[ii] = 1.0f;
@@ -549,6 +562,8 @@ static void find_HII_bubbles()
     // Remember to add the factor of VOLUME/TOT_NUM_PIXELS when converting from real space to k-space
     // Note: we will leave off factor of VOLUME, in anticipation of the inverse FFT below
     int slab_n_complex = (int)(UVBGgrids.slab_n_complex[this_rank]);
+    //TODO(jdavies): use simd here?
+    #pragma omp parallel for
     for (int ii = 0; ii < slab_n_complex; ii++) {
         deltax_unfiltered[ii] /= total_n_cells;
         stars_slab_unfiltered[ii] /= total_n_cells;
@@ -577,12 +592,6 @@ static void find_HII_bubbles()
 
     bool flag_last_filter_step = false;
     
-    //(jdavies) J21 total debug variables
-    double total_J21 = 0.;
-    /*double min_J21 = 1000.; //surely the minimum nonzero will be less than 1000
-    double max_J21 = 0.; 
-    double max_coll = 0.;*/
-
     while (!flag_last_filter_step) {
         // check to see if this is our last filtering step
         if (((R / ReionDeltaRFactor) <= (cell_length_factor * box_size / (double)uvbg_dim))
@@ -610,6 +619,7 @@ static void find_HII_bubbles()
         fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, (float*)sfr_filtered);
 
         // Perform sanity checks to account for aliasing effects
+        #pragma omp parallel for private(i_padded)
         for (int ix = 0; ix < local_nix; ix++)
             for (int iy = 0; iy < uvbg_dim; iy++)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -663,6 +673,7 @@ static void find_HII_bubbles()
             * All.UnitMass_in_g / pow(All.UnitLength_in_cm, 3) / All.UnitTime_in_s;
 
         // Main loop through the box...
+        #pragma omp parallel for collapse(3) private(i_real,i_padded,density_over_mean,f_coll_stars,sfr_density)
         for (int ix = 0; ix < local_nix; ix++)
             for (int iy = 0; iy < uvbg_dim; iy++)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -681,8 +692,6 @@ static void find_HII_bubbles()
 
                     const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
-                    //max_coll = fmax(f_coll_stars,max_coll);
-
                     // Check if ionised!
                     if (f_coll_stars > (1.0 / ReionEfficiency)) // IONISED!!!!
                     {
@@ -690,12 +699,6 @@ static void find_HII_bubbles()
                         if (xHI[i_real] > FLOAT_REL_TOL) {
                             const int i_grid_real = grid_index(ix + local_ix_start, iy, iz, uvbg_dim, INDEX_REAL);
                             J21[i_grid_real] = J21_aux;
-                            total_J21 += J21_aux;
-                            /*if(J21_aux > 0.0)
-                            {
-                                min_J21 = (J21_aux < min_J21) ? J21_aux : min_J21;
-                                max_J21 = (J21_aux > max_J21) ? J21_aux : max_J21;
-                            }*/
                         }
 
                         // Mark as ionised
@@ -756,9 +759,9 @@ static void find_HII_bubbles()
     double volume_weighted_global_xHI = 0.0;
     double mass_weighted_global_xHI = 0.0;
     double mass_weight = 0.0;
-    double total_stars = 0.0;
-    int ionised_cells = 0;
 
+    //TODO: this directive is ridiculous and I doubt the parallelisation does much here
+    #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI) reduction(+:density_over_mean) reduction(+:mass_weighted_global_xHI) reduction(+:mass_weight) private(i_real,i_padded)
     for (int ix = 0; ix < local_nix; ix++)
         for (int iy = 0; iy < uvbg_dim; iy++)
             for (int iz = 0; iz < uvbg_dim; iz++) {
@@ -768,17 +771,11 @@ static void find_HII_bubbles()
                 density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
                 mass_weighted_global_xHI += (double)(xHI[i_real]) * density_over_mean;
                 mass_weight += density_over_mean;
-                total_stars += (double)((float*)stars_slab_filtered)[i_padded];
-                //total_stars_u += (double)(stars_slab[i_padded]);
-                ionised_cells += xHI[i_real] < 0.1;
             }
 
     MPI_Allreduce(MPI_IN_PLACE, &volume_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weighted_global_xHI, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &mass_weight, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &total_stars, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &total_J21, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &ionised_cells, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     /*MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &max_J21, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &max_coll, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);*/
@@ -790,15 +787,6 @@ static void find_HII_bubbles()
 
     message(0,"vol weighted xhi : %f\n",volume_weighted_global_xHI);
     message(0,"mass weighted xhi : %f\n",mass_weighted_global_xHI);
-    message(0,"sum of stars : %f\n",total_stars);
-    message(0,"sum of J21 : %f\n",total_J21);
-    message(0,"ionised cells : %d\n",ionised_cells);
-    /*message(0,"nonzero minimum of J21 : %e\n",min_J21);
-    message(0,"nonzero maximum of J21 : %e\n",max_J21);
-    message(0,"Reionefficiency : %f\n",ReionEfficiency);
-    message(0,"max collapsed frac : %f\n",max_coll);
-    message(0,"Hubble check in sim units : %e\n", hubble_time);
-    message(0,"Hubble check in seconds : %e\n", hubble_time / All.UnitTime_in_s);*/
 }
 
 void save_uvbg_grids(int SnapshotFileCount)
@@ -826,26 +814,6 @@ void save_uvbg_grids(int SnapshotFileCount)
         }
     }
     MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-    //both star_buffer and J21 grids have been reduced onto all ranks, so no reduction of the stats is necessary
-    /*if(this_rank == 0)
-    {
-        for(int ii=0;ii<grid_n_real;ii++)
-        {
-            if(star_buffer[ii] > 0.0)
-            {
-                starcount++;
-                startotal += star_buffer[ii];
-                //message(0,"star grid = %f at %d\n",star_buffer[ii],ii);
-            }
-            if(UVBGgrids.J21[ii] > 0.0)
-            {
-                jcount++;
-                jtotal += UVBGgrids.J21[ii];
-                //message(0,"J21 grid = %f at %d\n",UVBGgrids.J21[ii],ii);
-            }
-        }
-        message(0,"%d nonzero star cells, %d nonzero j21 cells, %f total stars, %f total j21\n",starcount,jcount,startotal,jtotal);
-    }*/
 
     //TODO(jdavies): a better write function, probably using petaio stuff
     //These grids should have been reduced onto all ranks
