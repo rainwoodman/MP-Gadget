@@ -714,6 +714,7 @@ static void find_HII_bubbles()
                     }
 
                     // Check if new ionisation
+                    // TODO: if this is needed we should make these grids permanent
                     float* z_in = UVBGgrids.z_at_ionization;
                     if ((xHI[i_real] < FLOAT_REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
                     {

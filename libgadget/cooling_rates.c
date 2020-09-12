@@ -194,13 +194,6 @@ load_treecool(const char * TreeCoolFile)
             Eps_HI.ydata[i]     = load_tree_value(&saveptr)+ CoolingParams.HydrogenHeatAmp;
             Eps_HeI.ydata[i]    = load_tree_value(&saveptr);
             Eps_HeII.ydata[i]   = load_tree_value(&saveptr);
-            message(0,"-----coeffs for alpha = %.3f\n",Gamma_log1z[i]);
-            message(0,"gJH0 = %e\n",Gamma_HI.ydata[i]);
-            message(0,"gJHep = %e\n",Gamma_HeI.ydata[i]);
-            message(0,"gJHe0 = %e\n",Gamma_HeII.ydata[i]);
-            message(0,"epsH0 = %e\n",Eps_HI.ydata[i]);
-            message(0,"epsHep = %e\n",Eps_HeI.ydata[i]);
-            message(0,"epsHe0 = %e\n",Eps_HeII.ydata[i]);
             i++;
         }
 

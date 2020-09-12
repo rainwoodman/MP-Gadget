@@ -133,7 +133,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints].calc_uvbg = 1;
             NSyncPoints++;
-            message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
+            //message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             // TODO(jdavies): fix low-z where delta_a > 10Myr
@@ -179,11 +179,11 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[j].a = a;
             SyncPoints[j].loga = loga;
             NSyncPoints ++;
-            message(0,"added outlist syncpoint at a = %.3f, j = %d, Ns = %d\n",a,j,NSyncPoints);
+            //message(0,"added outlist syncpoint at a = %.3f, j = %d, Ns = %d\n",a,j,NSyncPoints);
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
-            //TODO(jdavies): put a flag here
+            //TODO(jdavies): put a flag here or alter run.c to output only on write_snapshot without calculating
             SyncPoints[j].calc_uvbg = 1;
             if(SnapshotWithFOF) {
                 SyncPoints[j].write_fof = 1;

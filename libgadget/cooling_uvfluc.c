@@ -201,7 +201,9 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     uvbg.gJHe0  = J21toUV.gJHe0 * J21; // s-1
     uvbg.epsHe0 = J21toUV.epsHe0 * J21 * 1.60218e-12;  // erg s-1
 
-    //TODO:put a flag here or utilise the Upton-Sanderbeck code in cooling_qso_lightup.c to tell if heii is ionised
+    //TODO:look more into the qso_lightup model to see if this is correct
+    //TODO: set heating to be consistent with qso model, which activates long_mfp_heating
+    //a self-consistent approach probably needs separate stellar/quasar rates, H+ He+, He++ spectral slopes
     if(heiiionized){
         uvbg.gJHep  = J21toUV.gJHep * J21; // s-1
         uvbg.epsHep = J21toUV.epsHep * J21 * 1.60218e-12;  // erg s-1
@@ -209,7 +211,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
 
     //(jdavies) debugging messages, print's first particle's UVBG
-    if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
+    /*if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
     {
         message(0,"-----main UVBG for one particle-----\n");
         message(0,"J_UV = %e\n",uvbg.J_UV);
@@ -230,7 +232,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
         message(0,"epsHe0 = %e\n",J21toUV.epsHe0);
 
         UVBGgrids.debug_printed = 1;
-    }
+    }*/
 
     return uvbg;
 }
