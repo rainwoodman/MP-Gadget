@@ -183,8 +183,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
-            //TODO(jdavies): put a flag here or alter run.c to output only on write_snapshot without calculating
-            SyncPoints[j].calc_uvbg = 1;
+            SyncPoints[j].calc_uvbg = 0;
             if(SnapshotWithFOF) {
                 SyncPoints[j].write_fof = 1;
             }
