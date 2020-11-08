@@ -286,7 +286,6 @@ static void populate_grids()
     float *buffer_sfr = fftwf_alloc_real((size_t)buffer_size);
 
     //RegionInd no longer global, allocate array for slab decomposition (Jdavies)
-    //TODO (jdavies): still find a better way to do this (with mymalloc?)
     int *UVRegionInd = mymalloc("UVRegionInd",sizeof(int) * PartManager->NumPart);
 
     // I am going to reuse the RegionInd member which is from petapm.  I
