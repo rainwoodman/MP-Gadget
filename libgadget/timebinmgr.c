@@ -96,7 +96,7 @@ void set_sync_params(int OutputListLength, double * OutputListTimes)
  * integer stamps.
  **/
 void
-setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, int SnapshotWithFOF)
+setup_sync_points(double TimeIC, double TimeMax, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF)
 {
     int i;
 
@@ -123,10 +123,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
     {
         double z_start = 20.;
         double uv_a = 1.0 / (1.0 + z_start);
-        /*message(1,"Om = %.3f, Ol = %.3f, Ok = %.3f, H0 = %.3f, h = %.3f\n",
-                All.CP.Omega0,All.CP.OmegaLambda,All.CP.OmegaK,
-                All.CP.Hubble / All.UnitTime_in_s,All.CP.HubbleParam); */
-        while (uv_a <= All.TimeMax) {
+        while (uv_a <= TimeMax) {
             SyncPoints[NSyncPoints].a = uv_a;
             SyncPoints[NSyncPoints].loga = log(uv_a);
             SyncPoints[NSyncPoints].write_snapshot = 0;
@@ -140,15 +137,15 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             double delta_a = 0.0001;
             double lbt = time_to_present(uv_a);
             double delta_lbt = 0.0;
-            while ((delta_lbt <= All.UVBGTimestep) && (uv_a <= All.TimeMax)) {
+            while ((delta_lbt <= UVBGTimestep) && (uv_a <= TimeMax)) {
                 uv_a += delta_a;
                 delta_lbt = lbt - time_to_present(uv_a);
             }
         }
     }
     
-    SyncPoints[NSyncPoints].a = All.TimeMax;
-    SyncPoints[NSyncPoints].loga = log(All.TimeMax);
+    SyncPoints[NSyncPoints].a = TimeMax;
+    SyncPoints[NSyncPoints].loga = log(TimeMax);
     SyncPoints[NSyncPoints].write_snapshot = 1;
     SyncPoints[NSyncPoints].calc_uvbg = 1;
     SyncPoints[NSyncPoints].write_fof = 0;
@@ -200,7 +197,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         SyncPoints[i].ti = (i * 1L) << (TIMEBINS);
     }
 
-    //message(1,"NSyncPoints = %d, OutputListLength = %d , timemax = %.3f\n",NSyncPoints,Sync.OutputListLength,All.TimeMax);
+    //message(1,"NSyncPoints = %d, OutputListLength = %d , timemax = %.3f\n",NSyncPoints,Sync.OutputListLength,TimeMax);
     /*for(i = 0; i < NSyncPoints; i++) {
         message(1,"Out: %g %ld\n", exp(SyncPoints[i].loga), SyncPoints[i].ti);
     }*/
