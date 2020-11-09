@@ -56,7 +56,7 @@ MinGasTemp = 5.0
 # Memory allocation
 
 PartAllocFactor = 2.0
-MaxMemSizePerNode = 32000
+MaxMemSizePerNode = 16000
 
 # Softening lengths
 
@@ -111,7 +111,7 @@ ReionDeltaRFactor = 1.1
 ReionGammaHaloBias = 2.0
 ReionNionPhotPerBary = 8000.0
 AlphaUV = 3.0
-EscapeFraction = 0.0
+EscapeFraction = 1.0
 UVBGTimestep = 10.0 #time between UVBG calculations
 UVBGSaveGrids = 1 #save UVBG related grids directly from 21cmfast
 ReionFilterType = 0 #Filter to use with 21CMFAST, 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian

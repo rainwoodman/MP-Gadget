@@ -4,7 +4,7 @@ FileBase = IC              # Base-filename of output files
 Ngrid = 128 # Size of cubic grid on which to create particles.
 
 BoxSize = 40000   # Periodic box size of simulation
-MaxMemSizePerNode = 32000
+MaxMemSizePerNode = 16000
 
 Omega0 = 0.2814      # Total matter density  (at z=0)
 OmegaLambda = 0.7186      # Cosmological constant (at z=0)
