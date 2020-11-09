@@ -890,16 +890,14 @@ void read_star_grids(int snapnum)
 
         //stars block
         BigBlock block;
-        big_file_open_block(&fout, &block, "stars", "=f4", 1, 1, (size_t[]){grid_n_real});
+        big_file_open_block(&fin, &block, "stars");
         BigArray arr = {0};
         big_array_init(&arr, UVBGgrids.stars, "=f4", 1, (size_t[]){grid_n_real}, NULL);
         BigBlockPtr ptr = {0};
         big_block_read(&block, &ptr, &arr);
         big_block_close(&block);
 
-        big_file_close(&fout);
-
-        myfree(star_buffer);
+        big_file_close(&fin);
 
         //TODO:(jdavies) now here things get strange, since the grids on all ranks are
         //summed together before the excursion set, I need a way to distribute them
@@ -908,12 +906,12 @@ void read_star_grids(int snapnum)
         //be confusing later on if we want to do something with local star grids
         for(int ii; ii<grid_n_real;ii++)
         {
-            UVBGgrids.stars /= n_ranks;
+            UVBGgrids.stars[ii] = UVBGgrids.stars[ii] / n_ranks;
         }
 
    }
    //send a copy of the divided grid to each rank
-   MPI_Bcast(UVBG.stars,grid_n_real,MPI_FLOAT,0,MPI_COMM_WORLD);
+   MPI_Bcast(UVBGgrids.stars,grid_n_real,MPI_FLOAT,0,MPI_COMM_WORLD);
 }
 
 void calculate_uvbg()
