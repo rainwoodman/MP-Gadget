@@ -1,0 +1,36 @@
+OutputDir = output_reion # Directory for output
+FileBase = IC              # Base-filename of output files
+
+Ngrid = 128 # Size of cubic grid on which to create particles.
+
+BoxSize = 40000   # Periodic box size of simulation
+MaxMemSizePerNode = 32000
+
+Omega0 = 0.2814      # Total matter density  (at z=0)
+OmegaLambda = 0.7186      # Cosmological constant (at z=0)
+OmegaBaryon = 0.0464     # Baryon density        (at z=0)
+ProduceGas = 1         # 1 = Produce gas  0 = no gas, just DM.
+HubbleParam = 0.697      # Hubble paramater (may be used for power spec parameterization)
+
+Redshift = 25        # Starting redshift
+
+Sigma8 = 0.810      # power spectrum normalization
+
+DifferentTransferFunctions = 0
+ScaleDepVelocity = 0
+
+WhichSpectrum = 2         # "1" selects Eisenstein & Hu spectrum,
+                           # "2" selects a tabulated power spectrum in
+                           # the file 'FileWithInputSpectrum'
+                           # otherwise, Efstathiou parametrization is used
+
+# filename of tabulated input in Mpc/h
+FileWithInputSpectrum = /home/jdavies/MP-Gadget/MP-Gadget/examples/powerspectrum-wmap9.txt
+
+PrimordialIndex = 0.971      # may be used to tilt the primordial index
+
+Seed = 181170    #  seed for IC-generator
+
+UnitLength_in_cm = 3.085678e21   # defines length unit of output (in cm/h) 
+UnitMass_in_g = 1.989e43      # defines mass unit of output (in g/cm)
+UnitVelocity_in_cm_per_s = 1e5           # defines velocity unit of output (in cm/sec)
