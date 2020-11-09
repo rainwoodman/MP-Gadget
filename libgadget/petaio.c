@@ -413,6 +413,14 @@ petaio_read_snapshot(int num, MPI_Comm Comm)
          * we always save the Entropy, init.c will not mess with the entropy
          * */
         petaio_read_internal(fname, 0, &IOTable, Comm);
+
+        /*if we are doing the excursion set, load in the star grid
+         * requires the last UV grid to be output
+         * */
+        //TODO (jdavies) make this not crash if the file doesn't exist:
+        if(All.ExcursionSetFlag)
+            read_star_grids(num);
+
     }
     myfree(fname);
 }
