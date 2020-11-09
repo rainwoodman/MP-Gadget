@@ -865,6 +865,57 @@ void save_uvbg_grids(int SnapshotFileCount)
    }
 }
 
+
+//read stellar grid for checkpoint start
+//at the moment I just divide by number of tasks since only the sum is used.
+//TODO: a better decomposition
+void read_star_grids(int snapnum)
+{
+    int n_ranks;
+    int this_rank=-1;
+    int uvbg_dim = All.UVBGdim;
+    int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+    MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
+    MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+
+    //TODO(jdavies): a better write function, probably using petaio stuff
+    if(this_rank == 0)
+    {
+
+        BigFile fin;
+        char fname[256];
+        sprintf(fname, "%s/UVgrids_%03d", All.OutputDir,snapnum);
+        message(0, "reading star grid from %s \n", fname);
+        big_file_open(&fin, fname);
+
+        //stars block
+        BigBlock block;
+        big_file_open_block(&fout, &block, "stars", "=f4", 1, 1, (size_t[]){grid_n_real});
+        BigArray arr = {0};
+        big_array_init(&arr, UVBGgrids.stars, "=f4", 1, (size_t[]){grid_n_real}, NULL);
+        BigBlockPtr ptr = {0};
+        big_block_read(&block, &ptr, &arr);
+        big_block_close(&block);
+
+        big_file_close(&fout);
+
+        myfree(star_buffer);
+
+        //TODO:(jdavies) now here things get strange, since the grids on all ranks are
+        //summed together before the excursion set, I need a way to distribute them
+        //from a checkpointed grid. Since particle info from previous snapshots is not
+        //read in, I simply divide it evenly here. This has no effect currently but might
+        //be confusing later on if we want to do something with local star grids
+        for(int ii; ii<grid_n_real;ii++)
+        {
+            UVBGgrids.stars /= n_ranks;
+        }
+
+   }
+   //send a copy of the divided grid to each rank
+   MPI_Bcast(UVBG.stars,grid_n_real,MPI_FLOAT,0,MPI_COMM_WORLD);
+}
+
 void calculate_uvbg()
 {
     walltime_measure("/Misc");
