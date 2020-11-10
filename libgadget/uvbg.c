@@ -296,6 +296,7 @@ static void populate_grids()
     // through all particles again n_slab times!
     double box_size = All.BoxSize;
 
+    // fill UVRegionInd with the index of the slab each particle is on, before filling the mass slabs
     #pragma omp parallel for
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if((!P[ii].IsGarbage) && (!P[ii].Swallowed) && (P[ii].Type < 5)) {
@@ -355,6 +356,8 @@ static void populate_grids()
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
         message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt));
 
+        // currently buffer_sfr is equal to prev_stars (see above MPI_Reduce), so we subtract the star buffer
+        // and divide by the time between now the last calculation to get the sfr
         #pragma omp parallel for
         for(int ii=0; ii < buffer_size; ii++) {
             buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * inv_dt / All.UnitTime_in_Megayears;
