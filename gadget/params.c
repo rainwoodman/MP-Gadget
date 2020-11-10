@@ -333,9 +333,9 @@ create_gadget_parameter_set()
     param_declare_int(ps, "ExcursionSetFlag", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
     param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Side length of the excursion set grid.");
     param_declare_int(ps, "UVBGSaveGrids", OPTIONAL, 1, "Flag to save reionisation grids.");
-    param_declare_int(ps, "ReionFilterType", OPTIONAL, 0., "Filter type for Excursion set");
-    param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20.34, "Maximum radius of excursion set filters in Mpc/h.");
-    param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 0.4068, "Minimum radius of excursion set filters in Mpc/h.");
+    param_declare_int(ps, "ReionFilterType", OPTIONAL, 0., "Filter type for Excursion set: 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian");
+    param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20340, "Maximum radius of excursion set filters in internal units");
+    param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 406.8, "Minimum radius of excursion set filters in internal units");
     param_declare_double(ps, "ReionDeltaRFactor", OPTIONAL, 1.1, "Fractional difference between excursion set bubble sizes.");
     param_declare_double(ps, "ReionGammaHaloBias", OPTIONAL, 2.0, "Halo Bias for calculating J21.");
     param_declare_double(ps, "ReionNionPhotPerBary", OPTIONAL, 4000., "Photons produced per stellar baryon.");
