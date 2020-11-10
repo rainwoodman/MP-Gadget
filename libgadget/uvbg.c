@@ -36,7 +36,42 @@
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
 
+static struct UVBGParams {
+    /*filter scale parameters*/
+    double ReionRBubbleMax;
+    double ReionRBubbleMin;
+    double ReionDeltaRFactor;
+    int ReionFilterType;
+
+    /*J21 calculation parameters*/
+    double ReionGammaHaloBias;
+    double ReionNionPhotPerBary;
+    //double AlphaUV;
+    double EscapeFraction;
+
+} uvbg_params;
+
 struct UVBGgrids_type UVBGgrids;
+
+/*set uvbg parameters*/
+void set_uvbg_params(ParameterSet * ps) {
+
+    int ThisTask;
+    MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
+    if(ThisTask==0)
+    {
+        uvbg_params.ReionFilterType = param_get_int(ps, "ReionFilterType");
+        uvbg_params.ReionRBubbleMax = param_get_double(ps, "ReionRBubbleMax");
+        uvbg_params.ReionRBubbleMin = param_get_double(ps, "ReionRBubbleMin");
+        uvbg_params.ReionDeltaRFactor = param_get_double(ps, "ReionDeltaRFactor");
+        uvbg_params.ReionGammaHaloBias = param_get_double(ps, "ReionGammaHaloBias");
+        uvbg_params.ReionNionPhotPerBary = param_get_double(ps, "ReionNionPhotPerBary");
+        //uvbg_params.AlphaUV = param_get_double(ps, "AlphaUV");
+        uvbg_params.EscapeFraction = param_get_double(ps, "EscapeFraction");
+    }
+    MPI_Bcast(&uvbg_params, sizeof(struct UVBGParams), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+}
 
 double integrand_time_to_present(double a, void *dummy)
 {
@@ -397,7 +432,7 @@ static void populate_grids()
 
 static void filter(fftwf_complex* box, const int local_ix_start, const int slab_nx, const int grid_dim, const float R)
 {
-    const int filter_type = All.ReionFilterType;
+    const int filter_type = uvbg_params.ReionFilterType;
     int middle = grid_dim / 2;
     float box_size = (float)All.BoxSize;
     float delta_k = (float)(2.0 * M_PI / box_size);
@@ -574,13 +609,13 @@ static void find_HII_bubbles()
 
     // Loop through filter radii
     //(jdavies): get the parameters
-    double ReionRBubbleMax = All.ReionRBubbleMax;
-    double ReionRBubbleMin = All.ReionRBubbleMin;
-    double ReionDeltaRFactor = All.ReionDeltaRFactor;
-    double ReionGammaHaloBias = All.ReionGammaHaloBias;
-    const double ReionNionPhotPerBary = All.ReionNionPhotPerBary;
+    double ReionRBubbleMax = uvbg_params.ReionRBubbleMax;
+    double ReionRBubbleMin = uvbg_params.ReionRBubbleMin;
+    double ReionDeltaRFactor = uvbg_params.ReionDeltaRFactor;
+    double ReionGammaHaloBias = uvbg_params.ReionGammaHaloBias;
+    const double ReionNionPhotPerBary = uvbg_params.ReionNionPhotPerBary;
     double alpha_uv = All.AlphaUV;
-    double EscapeFraction = All.EscapeFraction;
+    double EscapeFraction = uvbg_params.EscapeFraction;
 
     double R = fmin(ReionRBubbleMax, cell_length_factor * box_size); // Mpc/h
 

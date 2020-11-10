@@ -118,18 +118,8 @@ set_init_params(ParameterSet * ps)
         /*Parameters for the Excursion Set Algorithm*/
         All.ExcursionSetFlag = param_get_int(ps, "ExcursionSetFlag");
         All.UVBGdim = param_get_int(ps, "UVBGdim");
-        All.UVBGSaveGrids = param_get_int(ps, "UVBGSaveGrids");
-        All.ReionFilterType = param_get_int(ps, "ReionFilterType");
-        All.ReionRBubbleMax = param_get_double(ps, "ReionRBubbleMax");
-        All.ReionRBubbleMin = param_get_double(ps, "ReionRBubbleMin");
-        All.ReionDeltaRFactor = param_get_double(ps, "ReionDeltaRFactor");
-        All.ReionGammaHaloBias = param_get_double(ps, "ReionGammaHaloBias");
-        All.ReionNionPhotPerBary = param_get_double(ps, "ReionNionPhotPerBary");
         All.AlphaUV = param_get_double(ps, "AlphaUV");
-        All.EscapeFraction = param_get_double(ps, "EscapeFraction");
         All.UVBGTimestep = param_get_double(ps, "UVBGTimestep");
-        param_get_string2(ps, "J21CoeffFile", All.J21CoeffFile, sizeof(All.J21CoeffFile));
-
         /*End Parameters for the Excursion Set Algorithm*/
 
         if(All.StarformationOn == 0)

@@ -139,21 +139,11 @@ extern struct global_data_all_processes
 
     int RandomSeed; /*Initial seed for the random number table*/
 
-    //TODO(jdavies): move these to a uvbg_params struct?
     /*Parameters for the Excursion Set Algorithm*/
-    int UVBGdim;
     int ExcursionSetFlag;
-    double ReionRBubbleMax;
-    double ReionRBubbleMin;
-    double ReionDeltaRFactor;
-    double ReionGammaHaloBias;
-    double ReionNionPhotPerBary;
+    int UVBGdim;
     double AlphaUV;
-    double EscapeFraction;
     double UVBGTimestep;
-    int ReionFilterType;
-    int UVBGSaveGrids;
-    char J21CoeffFile[100];
     /*End Parameters for the Excursion Set Algorithm*/
 }
 All;

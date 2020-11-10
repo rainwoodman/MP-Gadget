@@ -332,7 +332,6 @@ create_gadget_parameter_set()
     /*Parameters for the Excursion Set Algorithm*/
     param_declare_int(ps, "ExcursionSetFlag", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
     param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Number of cells on a side of the excursion set grid. Resolution = BoxSize/UVBGdim");
-    param_declare_int(ps, "UVBGSaveGrids", OPTIONAL, 1, "Flag to save reionisation grids.");
     param_declare_int(ps, "ReionFilterType", OPTIONAL, 0., "Filter type for Excursion set: 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian");
     param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20340, "Maximum radius of excursion set filters in internal units");
     param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 406.8, "Minimum radius of excursion set filters in internal units");

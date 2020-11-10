@@ -62,6 +62,7 @@ static struct SFRParams
 
     /* Input files for the various cooling modules*/
     char TreeCoolFile[100];
+    char J21CoeffFile[100];
     char MetalCoolFile[100];
     char UVFluctuationFile[100];
     /* File with the helium reionization table*/
@@ -137,6 +138,7 @@ void set_sfr_params(ParameterSet * ps)
 
         /* File names*/
         param_get_string2(ps, "TreeCoolFile", sfr_params.TreeCoolFile, sizeof(sfr_params.TreeCoolFile));
+        param_get_string2(ps, "J21CoeffFile", sfr_params.J21CoeffFile, sizeof(sfr_params.J21CoeffFile));
         param_get_string2(ps, "UVFluctuationfile", sfr_params.UVFluctuationFile, sizeof(sfr_params.UVFluctuationFile));
         param_get_string2(ps, "MetalCoolFile", sfr_params.MetalCoolFile, sizeof(sfr_params.MetalCoolFile));
         param_get_string2(ps, "ReionHistFile", sfr_params.ReionHistFile, sizeof(sfr_params.ReionHistFile));
@@ -551,7 +553,6 @@ static int make_particle_star(int child, int parent, int placement)
         coord[ii] = pos_to_ngp(P[child].Pos[ii], All.BoxSize, All.UVBGdim);
     }
 
-    // TODO(smutch): Is this the correct mass to use, or should we be using the result of `find_star_mass`?
     // TODO(jdavies) account for drift in previous snapshots (populate each snap with mass?)
     // would have to re-make the union with J21 and reset the prev_stars stuff
     // or is this intentional, since where stars formed is more important for the reionisation field?
@@ -783,7 +784,7 @@ void init_cooling_and_star_formation(int CoolingOn)
     }
     else
     {
-        init_cooling(All.J21CoeffFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
+        init_cooling(sfr_params.J21CoeffFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
     }
 
     if(!CoolingOn)
