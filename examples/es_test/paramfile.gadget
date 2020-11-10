@@ -2,7 +2,6 @@
 
 InitCondFile = output_reion/IC
 OutputDir = output_reion
-TreeCoolFile = /home/jdavies/MP-Gadget/MP-Gadget/examples/J21_to_rates_test.txt
 MetalCoolFile = /home/jdavies/MP-Gadget/MP-Gadget/examples/cooling_metal_UVB
 OutputList = 0,09090,0.09259,0.09434,0.09615,0.09804,0.1000,0.1020,0.1042,0.1064,0.1087,0.1111,0.1136,0.1163,0.1190,0.1220,0.1250,0.1282,0.1316,0.1351,0.1389,0.1429,0.1471,0.1515,0.1563,0.1613
 EnableAggregatedIO = 1
@@ -115,3 +114,4 @@ EscapeFraction = 1.0
 UVBGTimestep = 10.0 #time between UVBG calculations
 UVBGSaveGrids = 1 #save UVBG related grids directly from 21cmfast
 ReionFilterType = 0 #Filter to use with 21CMFAST, 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian
+J21CoeffFile = /home/jdavies/MP-Gadget/MP-Gadget/examples/J21_to_rates_test.txt

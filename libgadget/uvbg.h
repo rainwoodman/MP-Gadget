@@ -51,5 +51,6 @@ void calculate_uvbg();
 void malloc_permanent_uvbg_grids();
 void free_permanent_uvbg_grids();
 void save_uvbg_grids(int SnapshotFileCount);
+void read_star_grids(int snapnum);
 
 #endif

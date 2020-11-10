@@ -342,6 +342,7 @@ create_gadget_parameter_set()
     param_declare_double(ps, "AlphaUV", OPTIONAL, 3., "Spectral slope of ionising radiation above the Hydrogen ionisation threshold.");
     param_declare_double(ps, "EscapeFraction", OPTIONAL, 1., "Constant escape fraction of ionising photons from galaxies.");
     param_declare_double(ps, "UVBGTimestep", OPTIONAL, 10., "Time in Myr between UVBG calculations.");
+    param_declare_string(ps, "J21CoeffFile", OPTIONAL, "", "Rate coefficient table for converting J21 to photo ion/heating rates at a certain spectral slope");
     /*End Parameters for the Excursion Set Algorithm*/
 
     param_set_action(ps, "BlackHoleFeedbackMethod", BlackHoleFeedbackMethodAction, NULL);
