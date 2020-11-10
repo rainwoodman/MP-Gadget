@@ -75,11 +75,7 @@ void set_uvbg_params(ParameterSet * ps) {
 
 double integrand_time_to_present(double a, void *dummy)
 {
-    double omega_m = All.CP.Omega0;
-    double omega_k = All.CP.OmegaK;
-    double omega_lambda = All.CP.OmegaLambda;
-
-    return 1 / sqrt(omega_m / a + omega_k + omega_lambda * a * a);
+    return 1 / hubble_function(&All.CP,a);
 }
 
 //time_to_present in Myr
@@ -102,7 +98,7 @@ double time_to_present(double a)
     gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
         1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
 
-    time = 1 / hubble * result;
+    time = result;
 
     gsl_integration_workspace_free(workspace);
 
@@ -636,6 +632,7 @@ static void find_HII_bubbles()
             flag_last_filter_step = true;
             R = cell_length_factor * box_size / (double)uvbg_dim;
         }
+        //message(0, "filter step R = %.3e, Rmax = %.3e, Rmin = %.3e, delta = %.3e\n",R,ReionRBubbleMax,ReionRBubbleMin,ReionDeltaRFactor);
 
         // copy the k-space grids
         memcpy(deltax_filtered, deltax_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
@@ -843,9 +840,9 @@ void save_uvbg_grids(int SnapshotFileCount)
     //malloc new grid for star grid reduction on one rank
     //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
     float* star_buffer;
+    star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
     if(this_rank == 0)
     {
-        star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
         for(int ii=0;ii<grid_n_real;ii++)
         {
             star_buffer[ii] = 0.0;
@@ -942,7 +939,7 @@ void read_star_grids(int snapnum)
         //from a checkpointed grid. Since particle info from previous snapshots is not
         //read in, I simply divide it evenly here. This has no effect currently but might
         //be confusing later on if we want to do something with local star grids
-        for(int ii; ii<grid_n_real;ii++)
+        for(int ii=0; ii<grid_n_real;ii++)
         {
             UVBGgrids.stars[ii] = UVBGgrids.stars[ii] / n_ranks;
         }

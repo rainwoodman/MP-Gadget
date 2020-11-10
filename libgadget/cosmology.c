@@ -6,14 +6,13 @@
 #include "cosmology.h"
 #include "physconst.h"
 #include "utils.h"
-#include "allvars.h"
 
 /*Stefan-Boltzmann constant in cgs units*/
 #define  STEFAN_BOLTZMANN 5.670373e-5
 
 static inline double OmegaFLD(const Cosmology * CP, const double a);
 
-void init_cosmology(Cosmology * CP, const double TimeBegin)
+void init_cosmology(Cosmology * CP, const double TimeBegin, double UnitLength, double UnitMass, double UnitTime)
 {
     /*With slightly relativistic massive neutrinos, for consistency we need to include radiation.
      * A note on normalisation (as of 08/02/2012):
@@ -25,8 +24,8 @@ void init_cosmology(Cosmology * CP, const double TimeBegin)
     CP->OmegaCDM = CP->Omega0 - CP->OmegaBaryon;
     CP->OmegaK = 1.0 - CP->Omega0 - CP->OmegaLambda;
 
-    const double G = GRAVITY / pow(All.UnitLength_in_cm, 3) * All.UnitMass_in_g * pow(All.UnitTime_in_s, 2);
-    CP->RhoCrit = 3.0 * CP->Hubble * CP->Hubble / (8.0 * M_PI * G);  // in internal units
+    CP->G = GRAVITY / pow(UnitLength, 3) * UnitMass * pow(UnitTime, 2);
+    CP->RhoCrit = 3.0 * CP->Hubble * CP->Hubble / (8.0 * M_PI * CP->G);  // in internal units
 
     /* Omega_g = 4 \sigma_B T_{CMB}^4 8 \pi G / (3 c^3 H^2) */
 

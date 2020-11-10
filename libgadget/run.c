@@ -660,7 +660,7 @@ set_units(void)
     All.CP.Hubble = HUBBLE * All.UnitTime_in_s;
     All.CP.UnitTime_in_s = All.UnitTime_in_s;
 
-    init_cosmology(&All.CP, All.TimeIC);
+    init_cosmology(&All.CP, All.TimeIC, All.UnitLength_in_cm, All.UnitMass_in_g, All.UnitTime_in_s);
     /* Detect cosmologies that are likely to be typos in the parameter files*/
     if(All.CP.HubbleParam < 0.1 || All.CP.HubbleParam > 10 ||
         All.CP.OmegaLambda < 0 || All.CP.OmegaBaryon < 0 || All.CP.OmegaG < 0 || All.CP.OmegaCDM < 0)

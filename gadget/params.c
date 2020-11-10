@@ -21,6 +21,7 @@
 #include <libgadget/petaio.h>
 #include <libgadget/cooling_qso_lightup.h>
 #include <libgadget/metal_return.h>
+#include <libgadget/uvbg.h>
 
 static int
 BlackHoleFeedbackMethodAction (ParameterSet * ps, char * name, void * data)
@@ -395,6 +396,7 @@ void read_parameter_file(char *fname, int * ShowBacktrace, double * MaxMemSizePe
     set_gravshort_tree_params(ps);
     set_domain_params(ps);
     set_sfr_params(ps);
+    set_uvbg_params(ps);
     set_winds_params(ps);
     set_fof_params(ps);
     set_blackhole_params(ps);

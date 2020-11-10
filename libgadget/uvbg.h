@@ -2,6 +2,7 @@
 #define UVBG_H
 
 #include <fftw3.h>
+#include "utils/paramset.h"
 
 struct UVBGgrids_type {
     ptrdiff_t *slab_nix;
@@ -52,5 +53,6 @@ void malloc_permanent_uvbg_grids();
 void free_permanent_uvbg_grids();
 void save_uvbg_grids(int SnapshotFileCount);
 void read_star_grids(int snapnum);
+void set_uvbg_params(ParameterSet * ps);
 
 #endif
