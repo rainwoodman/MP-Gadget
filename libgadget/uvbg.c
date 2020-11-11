@@ -75,7 +75,7 @@ void set_uvbg_params(ParameterSet * ps) {
 
 double integrand_time_to_present(double a, void *dummy)
 {
-    return 1 / hubble_function(&All.CP,a);
+    return 1 / a / hubble_function(&All.CP,a);
 }
 
 //time_to_present in Myr
@@ -98,7 +98,7 @@ double time_to_present(double a)
     gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
         1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
 
-    time = result;
+    time = result / (hubble/All.CP.Hubble);
 
     gsl_integration_workspace_free(workspace);
 
@@ -558,7 +558,8 @@ static void find_HII_bubbles()
     const double redshift = 1.0 / (All.Time) - 1.;
 
     double hubble_time;
-    hubble_time = hubble_function(&All.CP,All.Time);
+    hubble_time = 1 / (hubble_function(&All.CP,All.Time) / All.UnitTime_in_Megayears * All.CP.HubbleParam);
+    message(0,"hubble time is %.3e=n",hubble_time);
 
     // This parameter choice is sensitive to noise on the cell size, at least for the typical
     // cell sizes in RT simulations. It probably doesn't matter for larger cell sizes.
@@ -840,9 +841,9 @@ void save_uvbg_grids(int SnapshotFileCount)
     //malloc new grid for star grid reduction on one rank
     //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
     float* star_buffer;
-    star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
     if(this_rank == 0)
     {
+        star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
         for(int ii=0;ii<grid_n_real;ii++)
         {
             star_buffer[ii] = 0.0;
