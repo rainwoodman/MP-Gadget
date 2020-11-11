@@ -778,14 +778,7 @@ void init_cooling_and_star_formation(int CoolingOn)
     /*Enforces a minimum internal energy in cooling. */
     All.MinEgySpec = 1 / meanweight * (1.0 / GAMMA_MINUS1) * (BOLTZMANN / PROTONMASS) * sfr_params.MinGasTemp / coolunits.uu_in_cgs;
 
-    if(All.ExcursionSetFlag)
-    {
-        init_cooling(sfr_params.TreeCoolFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
-    }
-    else
-    {
-        init_cooling(sfr_params.J21CoeffFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
-    }
+    init_cooling(sfr_params.TreeCoolFile, sfr_params.J21CoeffFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
 
     if(!CoolingOn)
         return;

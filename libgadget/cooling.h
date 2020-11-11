@@ -42,7 +42,7 @@ struct cooling_units
 };
 
 /*Initialise the cooling module.*/
-void init_cooling(const char * TreeCoolFile, const char * MetalCoolFile, char * reion_hist_file, struct cooling_units cu, Cosmology * CP);
+void init_cooling(const char * TreeCoolFile, const char * J21CoeffFile, const char * MetalCoolFile, char * reion_hist_file, struct cooling_units cu, Cosmology * CP);
 
 /*Reads and initialises the tables for a spatially varying redshift of reionization*/
 void init_uvf_table(const char * UVFluctuationFile, const double BoxSize, const double UnitLength_in_cm);

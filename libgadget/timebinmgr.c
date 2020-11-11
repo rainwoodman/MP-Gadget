@@ -130,7 +130,7 @@ setup_sync_points(double TimeIC, double TimeMax, double UVBGTimestep, double no_
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints].calc_uvbg = 1;
             NSyncPoints++;
-            message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
+            //message(0,"added UVBG syncpoint at a = %.3f, Nsync = %d\n",uv_a,NSyncPoints);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             // TODO(jdavies): fix low-z where delta_a > 10Myr
@@ -140,7 +140,7 @@ setup_sync_points(double TimeIC, double TimeMax, double UVBGTimestep, double no_
             while ((delta_lbt <= UVBGTimestep) && (uv_a <= TimeMax)) {
                 uv_a += delta_a;
                 delta_lbt = lbt - time_to_present(uv_a);
-                message(0,"trying UVBG syncpoint at a = %.3e, z = %.3e, delta_lbt = %.3e\n",uv_a,1/uv_a - 1,delta_lbt);
+                //message(0,"trying UVBG syncpoint at a = %.3e, z = %.3e, delta_lbt = %.3e\n",uv_a,1/uv_a - 1,delta_lbt);
             }
         }
     }
