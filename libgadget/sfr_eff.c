@@ -550,7 +550,7 @@ static int make_particle_star(int child, int parent, int placement)
     // TODO(smutch): Use CIC
     int coord[3] = {0};
     for(int ii=0; ii<3; ii++) {
-        coord[ii] = pos_to_ngp(P[child].Pos[ii], All.BoxSize, All.UVBGdim);
+        coord[ii] = pos_to_ngp(P[child].Pos[ii],PartManager->CurrentParticleOffset[ii], All.BoxSize, All.UVBGdim);
     }
 
     // TODO(jdavies) account for drift in previous snapshots (populate each snap with mass?)

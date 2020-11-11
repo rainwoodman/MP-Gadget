@@ -45,7 +45,7 @@ typedef enum index_type {
     INDEX_COMPLEX_HERM,
 } index_type;
 
-int pos_to_ngp(double x, double side, int nx);
+int pos_to_ngp(double x, double Offset, double side, int nx);
 int grid_index(int i, int j, int k, int dim, index_type type);
 double time_to_present(double a);
 void calculate_uvbg();

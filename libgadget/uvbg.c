@@ -215,13 +215,25 @@ static void free_grids()
 }
 
 
-int pos_to_ngp(double x, double side, int nx)
+int pos_to_ngp(double x, double Offset, double side, int nx)
 {
-    int ind = (int)nearbyint(x / side * (double)nx);
+    //subtract offset
+    double corrpos = x - Offset;
 
+    //periodic box, corrpos now in [0,side] 
+    if (corrpos < 0)
+        corrpos += side;
+    if (corrpos > side)
+        corrpos -= side;
+    
+    //find nearest gridpoint, NOTE: can round to [0,nx]
+    int ind = (int)nearbyint((corrpos) / side * (double)nx);
+
+    //deal with ind == nx case by wrapping
     if (ind > nx - 1)
         ind = 0;
 
+    //make sure we are in bounds
     assert(ind > -1);
 
     return ind;
@@ -331,7 +343,7 @@ static void populate_grids()
     #pragma omp parallel for
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if((!P[ii].IsGarbage) && (!P[ii].Swallowed) && (P[ii].Type < 5)) {
-            ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim);
+            ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim);
             UVRegionInd[ii] = searchsorted(&ix, slab_ix_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
         } else {
             UVRegionInd[ii] = -1;
@@ -358,9 +370,9 @@ static void populate_grids()
         #pragma omp parallel for reduction(+:count_mass)
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(UVRegionInd[ii] == i_r) {
-                int ix = pos_to_ngp(P[ii].Pos[0], box_size, uvbg_dim) - ix_start;
-                int iy = pos_to_ngp(P[ii].Pos[1], box_size, uvbg_dim);
-                int iz = pos_to_ngp(P[ii].Pos[2], box_size, uvbg_dim);
+                int ix = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim) - ix_start;
+                int iy = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim);
+                int iz = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim);
 
                 int ind = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
 

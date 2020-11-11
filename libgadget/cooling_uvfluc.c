@@ -176,7 +176,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     int ind[3] = {-1};
     for (int ii = 0; ii<3; ii++)
     {
-        ind[ii] = pos_to_ngp(Pos[ii], All.BoxSize, All.UVBGdim);
+        ind[ii] = pos_to_ngp(Pos[ii], PosOffset[ii], All.BoxSize, All.UVBGdim);
     }
 
     struct UVBG uvbg = {0};
