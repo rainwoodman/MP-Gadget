@@ -261,7 +261,7 @@ load_J21coeffs(const char * J21CoeffFile)
         endrun(1, "Photon background contains: %d entries, not enough.\n", NJ21Coeffs);
 
     /*Allocate memory for the photon background table.*/
-    Gamma_alpha = mymalloc("TreeCoolTable", 7 * NJ21Coeffs * sizeof(double));
+    Gamma_alpha = mymalloc("J21CoeffTable", 7 * NJ21Coeffs * sizeof(double));
     G_HI_coeff.ydata = Gamma_alpha + NJ21Coeffs;
     G_HeI_coeff.ydata = Gamma_alpha + 2 * NJ21Coeffs;
     G_HeII_coeff.ydata = Gamma_alpha + 3 * NJ21Coeffs;
@@ -309,7 +309,7 @@ load_J21coeffs(const char * J21CoeffFile)
     init_itp_type(Gamma_alpha, &Eps_HeI_coeff, NJ21Coeffs);
     init_itp_type(Gamma_alpha, &Eps_HeII_coeff, NJ21Coeffs);
 
-    message(0, "Read %d lines alpha = %g - %g from file %s\n", NJ21Coeffs, Gamma_alpha[0], Gamma_alpha[NJ21Coeffs-1], J21CoeffFile);
+    message(0, "Read %d lines alpha = %g - %g, GHI %g - %g from file %s\n", NJ21Coeffs, Gamma_alpha[0], Gamma_alpha[NJ21Coeffs-1], G_HI_coeff.ydata[0], G_HI_coeff.ydata[NJ21Coeffs-1], J21CoeffFile);
 }
 
 /*Get photo ionization rate for neutral Hydrogen*/
@@ -396,7 +396,7 @@ static double
 get_photorate_coeff(double alpha, struct itp_type * Gamma_tab)
 {
     double photo_rate;
-    if (alpha >= Gamma_alpha[NTreeCool - 1])
+    if (alpha >= Gamma_alpha[NJ21Coeffs - 1])
         return 0;
     else if (alpha < Gamma_alpha[0])
         photo_rate = Gamma_tab->ydata[0];

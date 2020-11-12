@@ -98,6 +98,7 @@ double time_to_present(double a)
     gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
         1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
 
+    //convert to Myr and multiply by h
     time = result / (hubble/All.CP.Hubble);
 
     gsl_integration_workspace_free(workspace);
@@ -570,8 +571,9 @@ static void find_HII_bubbles()
     const double redshift = 1.0 / (All.Time) - 1.;
 
     double hubble_time;
-    hubble_time = 1 / (hubble_function(&All.CP,All.Time) / All.UnitTime_in_Megayears * All.CP.HubbleParam);
-    message(0,"hubble time is %.3e=n",hubble_time);
+    //hubble time in internal units
+    hubble_time = 1 / (hubble_function(&All.CP,All.Time) * All.CP.HubbleParam);
+    message(0,"hubble time is %.3e internal, %.3e s, %.3e Myr\n",hubble_time,hubble_time / All.UnitTime_in_s, hubble_time / All.UnitTime_in_Megayears);
 
     // This parameter choice is sensitive to noise on the cell size, at least for the typical
     // cell sizes in RT simulations. It probably doesn't matter for larger cell sizes.
@@ -846,10 +848,10 @@ void save_uvbg_grids(int SnapshotFileCount)
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
-    /*int starcount=0;
+    int starcount=0;
     double startotal=0.;
     int jcount=0;
-    double jtotal=0.;*/
+    double jtotal=0.;
     //malloc new grid for star grid reduction on one rank
     //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
     float* star_buffer;
@@ -862,6 +864,22 @@ void save_uvbg_grids(int SnapshotFileCount)
         }
     }
     MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
+
+    //print some debug stats
+    if(this_rank == 0)
+    {
+        for(int ii=0;ii<grid_n_real;ii++)
+        {
+            startotal += star_buffer[ii];
+            jtotal += UVBGgrids.J21[ii];
+            if(star_buffer[ii] > 0)
+                starcount++;
+            if(UVBGgrids.J21[ii] > 0)
+                jcount++;
+        }
+    }
+    message(0,"star grid has %d nonzero cells, %e total\n",starcount,startotal);
+    message(0,"J21 grid has %d nonzero cells, %e total\n",jcount,jtotal);
 
     //TODO(jdavies): a better write function, probably using petaio stuff
     //These grids should have been reduced onto all ranks
