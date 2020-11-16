@@ -453,7 +453,7 @@ static void populate_grids()
             ix[1] = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim);
             ix[2] = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim);
             //UVRegionInd[ii] = searchsorted(&ix, slab_i_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
-            UVRegionInd[ii] = find_UV_region(ix, slab_i_start, nranks);
+            UVRegionInd[ii] = find_UV_region(ix, (int*)slab_i_start, nranks);
         } else {
             UVRegionInd[ii] = -1;
         }
@@ -500,6 +500,7 @@ static void populate_grids()
         else
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
+        //TODO(jdavies): this is broken, find a way to reduce onto the right sub-cubes
         MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         
@@ -556,7 +557,7 @@ static void filter(pfftf_complex* box, const int* local_o_start, const int* slab
     #pragma omp parallel for
     for (int n_x = 0; n_x < slab_no[0]; n_x++) {
         float k_x;
-        int n_x_global = n_x + local_o_start;
+        int n_x_global = n_x + local_o_start[0];
 
         if (n_x_global > middle)
             k_x = (n_x_global - grid_dim) * delta_k;
@@ -565,11 +566,12 @@ static void filter(pfftf_complex* box, const int* local_o_start, const int* slab
 
         for (int n_y = 0; n_y < slab_no[1]; n_y++) {
             float k_y;
+            int n_y_global = n_x + local_o_start[1];
 
-            if (n_y > middle)
-                k_y = (n_y - grid_dim) * delta_k;
+            if (n_y_global > middle)
+                k_y = (n_y_global - grid_dim) * delta_k;
             else
-                k_y = n_y * delta_k;
+                k_y = n_y_global * delta_k;
 
             //TODO: make sure this is correct with padding etc
             for (int n_z = 0; n_z <= slab_no[2]; n_z++) {
@@ -632,8 +634,7 @@ static double RtoM(double R)
 static void create_plans()
 {
     int uvbg_dim = All.UVBGdim;
-    int n[3] = {uvbg_dim,uvbg_dim,uvbg_dim};
-
+    ptrdiff_t n[3] = {uvbg_dim,uvbg_dim,uvbg_dim};
     //TODO: have the flags stored somewhere so it's not both here and in assign_slabs
     unsigned pfft_flags = PFFT_PADDED_R2C;
 
@@ -789,9 +790,9 @@ static void find_HII_bubbles()
         }
 
         // inverse fourier transform back to real space
-        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, deltax_filtered, deltax_filtered);
-        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, stars_slab_filtered, stars_slab_filtered);
-        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, sfr_filtered);
+        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, deltax_filtered, (float*)deltax_filtered);
+        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, stars_slab_filtered, (float*)stars_slab_filtered);
+        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, (float*)sfr_filtered);
 
         // Perform sanity checks to account for aliasing effects
         #pragma omp parallel for private(i_padded)
@@ -890,7 +891,7 @@ static void find_HII_bubbles()
 
                     // Check if new ionisation
                     // TODO: if this is needed we should make these grids permanent
-                    double* z_in = UVBGgrids.z_at_ionization;
+                    float* z_in = UVBGgrids.z_at_ionization;
                     if ((xHI[i_real] < FLOAT_REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
                     {
                         z_in[i_real] = (float)redshift;

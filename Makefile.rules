@@ -20,7 +20,7 @@ CFLAGS += "-DHIGH_PRECISION=$(HIGH_PRECISION)"
 #For tests
 TCFLAGS = $(CFLAGS) -DGADGET_TESTDATA_ROOT=\"$(GADGET_TESTDATA_ROOT)\"
 
-BUNDLEDLIBS = -lbigfile-mpi -lbigfile -lpfft_omp -lfftw3_mpi -lfftw3_omp -lfftw3
+BUNDLEDLIBS = -lbigfile-mpi -lbigfile -lpfft_omp -lpfftf_omp -lfftw3_mpi -lfftw3_omp -lfftw3 -lfftw3f_mpi -lfftw3f_omp -lfftw3f
 LIBS  = -lm $(GSL_LIBS) $(FFTW_LIBS)
 LIBS += -L../depends/lib $(BUNDLEDLIBS)
 V ?= 0
