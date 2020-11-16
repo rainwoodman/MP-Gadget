@@ -1,31 +1,36 @@
 #ifndef UVBG_H
 #define UVBG_H
 
-#include <fftw3.h>
+#include <pfft.h>
 #include "utils/paramset.h"
 
 struct UVBGgrids_type {
-    ptrdiff_t *slab_nix;
-    ptrdiff_t *slab_ix_start;
+    ptrdiff_t *slab_ni;
+    ptrdiff_t *slab_no;
+    ptrdiff_t *slab_i_start;
+    ptrdiff_t *slab_o_start;
     ptrdiff_t *slab_n_complex;
-    
+
+    //communicator for PFFT
+    MPI_Comm comm_cart_2d;
+
     float *J21;
     float *prev_stars;
 
     float *stars;
 
     float *deltax;
-    fftwf_complex *deltax_filtered;
+    pfftf_complex *deltax_filtered;
     float *stars_slab;
-    fftwf_complex *stars_slab_filtered;
+    pfftf_complex *stars_slab_filtered;
     float *sfr;
-    fftwf_complex *sfr_filtered;
+    pfftf_complex *sfr_filtered;
     float *xHI;
     float *z_at_ionization;
     float *J21_at_ionization;
 
-    fftwf_plan plan_dft_r2c;
-    fftwf_plan plan_dft_c2r;
+    pfftf_plan plan_dft_r2c;
+    pfftf_plan plan_dft_c2r;
 
     double last_a;  //< Last called expansion factor
 

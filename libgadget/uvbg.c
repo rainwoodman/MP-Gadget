@@ -19,10 +19,10 @@
 #include <bigfile.h>
 #include <bigfile-mpi.h>
 #include <complex.h>
-#include <fftw3.h>
 #include <stdbool.h>
 #include <gsl/gsl_integration.h>
 #include <assert.h>
+//#include <fftw3.h>
 
 #include "uvbg.h"
 #include "cosmology.h"
@@ -113,32 +113,90 @@ static void assign_slabs()
 
     int uvbg_dim = All.UVBGdim;
     // Allocations made in this function are free'd in `free_reionization_grids`.
-    fftwf_mpi_init();
+
+    //TODO(jdavies): probably move the first half of this to an initialize function
+    //TODO: do I need to reinitialise this after petapm?
+    pfftf_init();
+    pfftf_plan_with_nthreads(omp_get_max_threads());
+
+    //TODO: have the flags stored somewhere so it's not both here and in create_plans
+    unsigned pfft_flags = PFFT_PADDED_R2C;
 
     // Assign the slab size
     int n_ranks;
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
-    // Use fftw to find out what slab each rank should get
-    ptrdiff_t local_nix, local_ix_start;
-    ptrdiff_t local_n_complex = fftwf_mpi_local_size_3d(uvbg_dim, uvbg_dim, uvbg_dim / 2 + 1, MPI_COMM_WORLD, &local_nix, &local_ix_start);
+    //TODO(jdavies): check if pfft wants in or out dimensions here
+    ptrdiff_t n[3] = {uvbg_dim,uvbg_dim,uvbg_dim};
+    int np[2];
+
+    /* try to find a square 2d decomposition */
+    //TODO(jdavies): ask Simeon about what this is/does and whether I need it
+    int i;
+    for(i = sqrt(n_ranks) + 1; i >= 0; i --) {
+        if(n_ranks % i == 0) break;
+    }
+    np[0] = i;
+    np[1] = n_ranks / i;
+
+    message(0, "Using 2D Task mesh for UVBG %td x %td \n", np[0], np[1]);
+    if( pfftf_create_procmesh_2d(MPI_COMM_WORLD, np[0], np[1], &UVBGgrids.comm_cart_2d) ){
+        endrun(0, "Error: This test file only works with %td processes.\n", np[0]*np[1]);
+    }
+
+    MPI_Comm comm_cart_2d = UVBGgrids.comm_cart_2d;
+
+    // find out what slab each rank should get
+    ptrdiff_t local_ni[3], local_i_start[3];
+    ptrdiff_t local_no[3], local_o_start[3];
+    ptrdiff_t local_n_complex = pfftf_local_size_dft_r2c_3d(n, comm_cart_2d, pfft_flags, local_ni, local_i_start, local_no, local_o_start);
 
     // let every rank know...
-    ptrdiff_t* slab_nix = mymalloc("slab_nix",sizeof(ptrdiff_t) * n_ranks); ///< array of number of x cells of every rank
-    UVBGgrids.slab_nix = slab_nix;
-    MPI_Allgather(&local_nix, sizeof(ptrdiff_t), MPI_BYTE, slab_nix, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
+    ptrdiff_t* slab_ni = mymalloc("slab_ni",sizeof(ptrdiff_t) * n_ranks * 3); ///< array of number of x cells of every rank
+    UVBGgrids.slab_ni = slab_ni;
+    MPI_Allgather(&local_ni, sizeof(ptrdiff_t)*3, MPI_BYTE, slab_ni, sizeof(ptrdiff_t)*3, MPI_BYTE, MPI_COMM_WORLD);
 
-    ptrdiff_t *slab_ix_start = mymalloc("slab_ix_start",sizeof(ptrdiff_t) * n_ranks); ///< array first x cell of every rank
-    UVBGgrids.slab_ix_start = slab_ix_start;
-    slab_ix_start[0] = 0;
-    for (int ii = 1; ii < n_ranks; ii++)
-    {
-        slab_ix_start[ii] = slab_ix_start[ii - 1] + slab_nix[ii - 1];
-        message(0,"rank %d got slab size %d starting at %d\n",ii,slab_nix[ii],slab_ix_start[ii]);
-    }
+    ptrdiff_t *slab_i_start = mymalloc("slab_i_start",sizeof(ptrdiff_t) * n_ranks * 3); ///< array first x cell of every rank
+    UVBGgrids.slab_i_start = slab_i_start;
+    MPI_Allgather(&local_i_start, sizeof(ptrdiff_t)*3, MPI_BYTE, slab_i_start, sizeof(ptrdiff_t)*3, MPI_BYTE, MPI_COMM_WORLD);
+
+    ptrdiff_t* slab_no = mymalloc("slab_no",sizeof(ptrdiff_t) * n_ranks * 3); ///< array of number of x cells of every rank
+    UVBGgrids.slab_no = slab_no;
+    MPI_Allgather(&local_no, sizeof(ptrdiff_t)*3, MPI_BYTE, slab_no, sizeof(ptrdiff_t)*3, MPI_BYTE, MPI_COMM_WORLD);
+
+    ptrdiff_t *slab_o_start = mymalloc("slab_o_start",sizeof(ptrdiff_t) * n_ranks * 3); ///< array first x cell of every rank
+    UVBGgrids.slab_o_start = slab_o_start;
+    MPI_Allgather(&local_o_start, sizeof(ptrdiff_t)*3, MPI_BYTE, slab_o_start, sizeof(ptrdiff_t)*3, MPI_BYTE, MPI_COMM_WORLD);
+
     ptrdiff_t *slab_n_complex = mymalloc("slab_n_complex",sizeof(ptrdiff_t) * n_ranks); ///< array of allocation counts for every rank
     UVBGgrids.slab_n_complex = slab_n_complex;
     MPI_Allgather(&local_n_complex, sizeof(ptrdiff_t), MPI_BYTE, slab_n_complex, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
+
+    for (int ii = 0; ii < n_ranks; ii++)
+    {
+        message(0,"rank %d got slab size (%d) (%d,%d,%d) starting at (%d,%d,%d)\n Outputs size (%d,%d,%d) starting at (%d,%d,%d)\n"
+                ,ii,slab_n_complex[ii],slab_ni[3*ii],slab_ni[3*ii+1],slab_ni[3*ii+2]
+                ,slab_i_start[3*ii],slab_i_start[3*ii+1],slab_i_start[3*ii+2]
+                ,slab_no[3*ii],slab_no[3*ii+1],slab_no[3*ii+2]
+                ,slab_o_start[3*ii],slab_o_start[3*ii+1],slab_o_start[3*ii+2]);
+    }
+
+    //TODO(jdavies): find out why we are setting ix_start again instead of just using the local_size output
+    //slab_i_start[0] = 0;
+    //slab_i_start[1] = 0;
+    //slab_i_start[2] = 0;
+    /*for (int ii = 1; ii < n_ranks; ii++)
+    {
+        slab_i_start[3*ii] = slab_i_start[3*(ii - 1)] + slab_ni[3*(ii - 1)];
+        slab_i_start[3*ii + 1] = slab_i_start[3*(ii - 1) + 1] + slab_ni[3*(ii - 1) + 1];
+        slab_i_start[3*ii + 2] = slab_i_start[3*(ii - 1) + 2] + slab_ni[3*(ii - 1) + 2];
+        message(0,"rank %d got slab size (%d,%d,%d) starting at (%d,%d,%d)\n"
+                ,ii,slab_ni[3*ii],slab_ni[3*ii+1],slab_ni[3*ii+2]
+                ,slab_i_start[3*ii],slab_i_start[3*ii+1],slab_i_start[3*ii+2]);
+    }*/
+
+    //DEBUG STOP SO I CAN FIGURE OUT PFFT DECOMPOSITION TODO: REMOVE
+    endrun(0, "stopping here for debug\n");
 }
 
 void malloc_permanent_uvbg_grids()
@@ -173,11 +231,23 @@ void free_permanent_uvbg_grids()
 static void malloc_grids()
 {
     int this_rank;
-    int uvbg_dim = All.UVBGdim;
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
     ptrdiff_t slab_n_complex = UVBGgrids.slab_n_complex[this_rank];
-    ptrdiff_t slab_n_real = UVBGgrids.slab_nix[this_rank] * uvbg_dim * uvbg_dim;
-    
+    ptrdiff_t slab_n_real = UVBGgrids.slab_ni[3*this_rank] * UVBGgrids.slab_ni[3*this_rank + 1] * UVBGgrids.slab_ni[3*this_rank + 2];
+  
+    //TODO(jdavies): look at single vs double precision here (was fftwf == floats)
+    //TODO(jdavies): also look at the padding, was this calculated by local_size earlier?
+    UVBGgrids.deltax = mymalloc("deltax", slab_n_real * sizeof(float));
+    UVBGgrids.deltax_filtered = (pfftf_complex *) mymalloc("deltax_filtered", slab_n_complex * sizeof(pfftf_complex));
+    UVBGgrids.stars_slab = mymalloc("stars_slab", slab_n_real * sizeof(float));
+    UVBGgrids.stars_slab_filtered = (pfftf_complex *) mymalloc("stars_slab_filtered", slab_n_complex * sizeof(pfftf_complex));
+    UVBGgrids.sfr = mymalloc("sfr", slab_n_real * sizeof(float));
+    UVBGgrids.sfr_filtered = (pfftf_complex *) mymalloc("sfr_filtered", slab_n_complex * sizeof(pfftf_complex));
+    UVBGgrids.xHI = mymalloc("sfr", slab_n_real * sizeof(float));
+    UVBGgrids.z_at_ionization = mymalloc("z_at_ion", slab_n_real * sizeof(float));
+    UVBGgrids.J21_at_ionization = mymalloc("J21_at_ion", slab_n_real * sizeof(float));
+
+    /*
     UVBGgrids.deltax = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
     UVBGgrids.deltax_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
     UVBGgrids.stars_slab = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
@@ -187,7 +257,7 @@ static void malloc_grids()
     UVBGgrids.xHI = fftwf_alloc_real((size_t)slab_n_real);
     UVBGgrids.z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
     UVBGgrids.J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
-
+    */
     // Init grids for which values persist for the entire simulation
     for(ptrdiff_t ii=0; ii < slab_n_real; ++ii) {
         UVBGgrids.z_at_ionization[ii] = -999.0f;
@@ -200,10 +270,24 @@ static void malloc_grids()
 
 static void free_grids()
 {
+    //grids were alloc'd after slab decomp, so free these first
+    myfree(UVBGgrids.J21_at_ionization);
+    myfree(UVBGgrids.z_at_ionization);
+    myfree(UVBGgrids.xHI);
+    myfree(UVBGgrids.stars_slab);
+    myfree(UVBGgrids.stars_slab_filtered);
+    myfree(UVBGgrids.deltax_filtered);
+    myfree(UVBGgrids.deltax);
+    myfree(UVBGgrids.sfr);
+    myfree(UVBGgrids.sfr_filtered);
+    
     myfree(UVBGgrids.slab_n_complex);
-    myfree(UVBGgrids.slab_ix_start);
-    myfree(UVBGgrids.slab_nix);
+    myfree(UVBGgrids.slab_o_start);
+    myfree(UVBGgrids.slab_no);
+    myfree(UVBGgrids.slab_i_start);
+    myfree(UVBGgrids.slab_ni);
 
+    /*
     fftwf_free(UVBGgrids.J21_at_ionization);
     fftwf_free(UVBGgrids.z_at_ionization);
     fftwf_free(UVBGgrids.xHI);
@@ -213,6 +297,7 @@ static void free_grids()
     fftwf_free(UVBGgrids.deltax);
     fftwf_free(UVBGgrids.sfr);
     fftwf_free(UVBGgrids.sfr_filtered);
+    */
 }
 
 
@@ -284,6 +369,26 @@ static int searchsorted(void* val,
     }
 }
 
+//NOTE: this is less efficient than searchsorted, but works with the 3d decomp
+//TODO: optimize
+//ix_start is no longer guaranteed to be sorted, but there should only be one correct slab per coordinate
+int find_UV_region(int* coords, int* slab_i_start, int count)
+{
+    //count is number of slabs, not size of array
+    for(int i=0;i<count;i++)
+    {
+        if(coords[0] >= slab_i_start[3*i] && coords[0] < slab_i_start[3*(i+1)]
+                && coords[1] >= slab_i_start[3*i + 1] && coords[1] < slab_i_start[3*(i+1) + 1]
+                && coords[2] >= slab_i_start[3*i + 2] && coords[1] < slab_i_start[3*(i+1) + 2])
+        {
+
+            return i;
+        }
+    }
+    //this shouldn't happen
+    endrun(0,"particle (%d,%d,%d) outside all UV regions???\n",coords[0],coords[1],coords[2]);
+}
+
 
 int grid_index(int i, int j, int k, int dim, index_type type)
 {
@@ -300,7 +405,7 @@ int grid_index(int i, int j, int k, int dim, index_type type)
         ind = k + (dim / 2 + 1) * (j + dim * i);
         break;
     default:
-        endrun(1, "Unknown indexing type in `grid_index`.");
+        endrun(1, "Unknown indexing type in `grid_index`.\n");
         break;
     }
 
@@ -310,30 +415,29 @@ int grid_index(int i, int j, int k, int dim, index_type type)
 
 static void populate_grids()
 {
-    // TODO(smutch): Is this stored somewhere globally?
     int uvbg_dim = All.UVBGdim;
     int nranks = -1, this_rank = -1;
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    ptrdiff_t *slab_nix = UVBGgrids.slab_nix;
-    ptrdiff_t *slab_ix_start = UVBGgrids.slab_ix_start;
+    ptrdiff_t *slab_ni = UVBGgrids.slab_ni;
+    ptrdiff_t *slab_i_start = UVBGgrids.slab_i_start;
 
     // create buffers on each rank which is as large as the largest LOGICAL allocation on any single rank
     int buffer_size = 0;
     for (int ii = 0; ii < nranks; ii++)
-        if (slab_nix[ii] > buffer_size)
-            buffer_size = (int)slab_nix[ii];
+    {
+        int temp = (int)slab_ni[3*ii]*slab_ni[3*ii+1]*slab_ni[3*ii+2];
+        if (temp > buffer_size)
+            buffer_size = temp;
+    }
 
-    buffer_size *= uvbg_dim * uvbg_dim;
-    float *buffer_mass = fftwf_alloc_real((size_t)buffer_size);
-    float *buffer_stars_slab = fftwf_alloc_real((size_t)buffer_size);
-    float *buffer_sfr = fftwf_alloc_real((size_t)buffer_size);
+    float *buffer_mass = mymalloc("buffer_mass",(size_t)buffer_size * sizeof(float));
+    float *buffer_stars_slab = mymalloc("buffer_stars_slab",(size_t)buffer_size * sizeof(float));
+    float *buffer_sfr = mymalloc("buffer_sfr",(size_t)buffer_size * sizeof(float));
 
     //RegionInd no longer global, allocate array for slab decomposition (Jdavies)
     int *UVRegionInd = mymalloc("UVRegionInd",sizeof(int) * PartManager->NumPart);
 
-    // I am going to reuse the RegionInd member which is from petapm.  I
-    // *think* this is ok as we are doing this after the grav calculations.
     // This is a potentially stupid way to do things anyway and will most
     // definitely need to be changed! There is no way we should have to search
     // all of the particles to find out what slab they sit on, and then loop
@@ -344,8 +448,12 @@ static void populate_grids()
     #pragma omp parallel for
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if((!P[ii].IsGarbage) && (!P[ii].Swallowed) && (P[ii].Type < 5)) {
-            ptrdiff_t ix = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim);
-            UVRegionInd[ii] = searchsorted(&ix, slab_ix_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
+            int ix[3];
+            ix[0] = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim);
+            ix[1] = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim);
+            ix[2] = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim);
+            //UVRegionInd[ii] = searchsorted(&ix, slab_i_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
+            UVRegionInd[ii] = find_UV_region(ix, slab_i_start, nranks);
         } else {
             UVRegionInd[ii] = -1;
         }
@@ -353,15 +461,14 @@ static void populate_grids()
 
 
     for (int i_r = 0; i_r < nranks; i_r++) {
-
-        const int ix_start = slab_ix_start[i_r];
-        const int nix = slab_nix[i_r];
+        const int ix_start[3] = {slab_i_start[3*i_r],slab_i_start[3*i_r + 1],slab_i_start[3*i_r + 2]};
+        const int nix[3] = {slab_ni[3*i_r],slab_ni[3*i_r + 1],slab_ni[3*i_r + 2]};
 
         // init the buffers
         for (int ii = 0; ii < buffer_size; ii++) {
-            buffer_mass[ii] = (float)0.;
-            buffer_stars_slab[ii] = (float)0.;
-            buffer_sfr[ii] = (float)0.;
+            buffer_mass[ii] = 0.f;
+            buffer_stars_slab[ii] = 0.f;
+            buffer_sfr[ii] = 0.f;
         }
 
 
@@ -371,9 +478,9 @@ static void populate_grids()
         #pragma omp parallel for reduction(+:count_mass)
         for(int ii = 0; ii < PartManager->NumPart; ii++) {
             if(UVRegionInd[ii] == i_r) {
-                int ix = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim) - ix_start;
-                int iy = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim);
-                int iz = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim);
+                int ix = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim) - ix_start[0];
+                int iy = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim) - ix_start[1];
+                int iz = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim) - ix_start[2];
 
                 int ind = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
 
@@ -393,8 +500,8 @@ static void populate_grids()
         else
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
-        MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix*uvbg_dim*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         
         // TODO(smutch): These could perhaps be precalculated?
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
@@ -411,9 +518,9 @@ static void populate_grids()
             const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
             const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
             #pragma omp parallel for collapse(3)
-            for (int ix = 0; ix < slab_nix[i_r]; ix++)
-                for (int iy = 0; iy < uvbg_dim; iy++)
-                    for (int iz = 0; iz < uvbg_dim; iz++) {
+            for (int ix = 0; ix < slab_ni[3*i_r]; ix++)
+                for (int iy = 0; iy < slab_ni[3*i_r + 1]; iy++)
+                    for (int iz = 0; iz < slab_ni[3*i_r + 2]; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
                         const int ind_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
                         const int ind_pad = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
@@ -425,21 +532,19 @@ static void populate_grids()
         }
     }
 
-    fftwf_free(buffer_stars_slab);
-    fftwf_free(buffer_mass);
+    myfree(buffer_stars_slab);
+    myfree(buffer_mass);
     myfree(UVRegionInd);
 
     // set the last_a value so we can calulate dt for the SFR at the next call
     UVBGgrids.last_a = All.Time;
     // copy the current stellar mass grid so we can work out the SFRs
-    // WATCH OUT: prev_stars is a union with J21 to save memory.  Until
-    // find_HII_bubbles is called again, J21 will be invalid!
     const size_t grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
     memcpy(UVBGgrids.prev_stars, UVBGgrids.stars, sizeof(float) * grid_n_real);
 }
 
 
-static void filter(fftwf_complex* box, const int local_ix_start, const int slab_nx, const int grid_dim, const float R)
+static void filter(pfftf_complex* box, const int* local_o_start, const int* slab_no, const int grid_dim, const float R)
 {
     const int filter_type = uvbg_params.ReionFilterType;
     int middle = grid_dim / 2;
@@ -449,16 +554,16 @@ static void filter(fftwf_complex* box, const int local_ix_start, const int slab_
     // Loop through k-box
     // (jdavies): outer loop ONLY threaded here, not perfectly nested
     #pragma omp parallel for
-    for (int n_x = 0; n_x < slab_nx; n_x++) {
+    for (int n_x = 0; n_x < slab_no[0]; n_x++) {
         float k_x;
-        int n_x_global = n_x + local_ix_start;
+        int n_x_global = n_x + local_o_start;
 
         if (n_x_global > middle)
             k_x = (n_x_global - grid_dim) * delta_k;
         else
             k_x = n_x_global * delta_k;
 
-        for (int n_y = 0; n_y < grid_dim; n_y++) {
+        for (int n_y = 0; n_y < slab_no[1]; n_y++) {
             float k_y;
 
             if (n_y > middle)
@@ -466,7 +571,8 @@ static void filter(fftwf_complex* box, const int local_ix_start, const int slab_
             else
                 k_y = n_y * delta_k;
 
-            for (int n_z = 0; n_z <= middle; n_z++) {
+            //TODO: make sure this is correct with padding etc
+            for (int n_z = 0; n_z <= slab_no[2]; n_z++) {
                 float k_z = n_z * delta_k;
 
                 float k_mag = sqrtf(k_x * k_x + k_y * k_y + k_z * k_z);
@@ -476,24 +582,24 @@ static void filter(fftwf_complex* box, const int local_ix_start, const int slab_
                 switch (filter_type) {
                 case 0: // Real space top-hat
                     if (kR > 1e-4)
-                        box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] *= (fftwf_complex)(3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
+                        box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] *= (pfftf_complex)(3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
                     break;
 
                 case 1: // k-space top hat
                     kR *= 0.413566994; // Equates integrated volume to the real space top-hat (9pi/2)^(-1/3)
                     if (kR > 1)
-                        box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] = (fftwf_complex)0.0;
+                        box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] = (pfftf_complex)0.0;
                     break;
 
                 case 2: // Gaussian
                     kR *= 0.643; // Equates integrated volume to the real space top-hat
-                    box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] *= (fftwf_complex)(powf((float)M_E,
-                        (float)(-kR * kR / 2.0)));
+                    box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] *= (pfftf_complex)(pow(M_E,
+                        (-kR * kR / 2.0)));
                     break;
 
                 default:
                     if ((n_x == 0) && (n_y == 0) && (n_z == 0)) {
-                        endrun(1, "ReionFilterType type %d is undefined!", filter_type);
+                        endrun(1, "ReionFilterType type %d is undefined!\n", filter_type);
                     }
                     break;
                 }
@@ -516,7 +622,7 @@ static double RtoM(double R)
     case 1: //gaussian: M = (2PI)^1.5 <rho> R^3
         return pow(2 * M_PI, 1.5) * OmegaM * RhoCrit * pow(R, 3);
     default: // filter not defined
-        endrun(1, "Unrecognised RtoM filter (%d).", filter);
+        endrun(1, "Unrecognised RtoM filter (%d).\n", filter);
         break;
     }
 
@@ -526,18 +632,22 @@ static double RtoM(double R)
 static void create_plans()
 {
     int uvbg_dim = All.UVBGdim;
-    UVBGgrids.plan_dft_r2c = fftwf_mpi_plan_dft_r2c_3d(uvbg_dim, uvbg_dim, uvbg_dim,
-            UVBGgrids.deltax, (fftwf_complex*)UVBGgrids.deltax,
-            MPI_COMM_WORLD, FFTW_PATIENT);
-    UVBGgrids.plan_dft_c2r = fftwf_mpi_plan_dft_c2r_3d(uvbg_dim, uvbg_dim, uvbg_dim,
-            (fftwf_complex*)UVBGgrids.deltax, UVBGgrids.deltax,
-            MPI_COMM_WORLD, FFTW_PATIENT);
+    int n[3] = {uvbg_dim,uvbg_dim,uvbg_dim};
+
+    //TODO: have the flags stored somewhere so it's not both here and in assign_slabs
+    unsigned pfft_flags = PFFT_PADDED_R2C;
+
+    UVBGgrids.plan_dft_r2c = pfftf_plan_dft_r2c_3d(n,UVBGgrids.deltax,
+            (pfftf_complex*)UVBGgrids.deltax,UVBGgrids.comm_cart_2d,PFFT_FORWARD,pfft_flags|PFFT_PATIENT);
+    UVBGgrids.plan_dft_c2r = pfftf_plan_dft_c2r_3d(n,(pfftf_complex*)UVBGgrids.deltax
+            ,UVBGgrids.deltax,MPI_COMM_WORLD,PFFT_BACKWARD,pfft_flags|PFFT_PATIENT);
 }
 
 static void destroy_plans()
 {
-    fftwf_destroy_plan(UVBGgrids.plan_dft_c2r);
-    fftwf_destroy_plan(UVBGgrids.plan_dft_r2c);
+    pfftf_destroy_plan(UVBGgrids.plan_dft_c2r);
+    pfftf_destroy_plan(UVBGgrids.plan_dft_r2c);
+    MPI_Comm_free(&UVBGgrids.comm_cart_2d);
 }
 
 static void find_HII_bubbles()
@@ -557,8 +667,11 @@ static void find_HII_bubbles()
     double pixel_volume = pow(box_size / (double)uvbg_dim, 3); // (Mpc/h)^3 comoving
     double cell_length_factor = 0.620350491;
     double total_n_cells = pow((double)uvbg_dim, 3);
-    int local_nix = (int)(UVBGgrids.slab_nix[this_rank]);
-    int slab_n_real = local_nix * uvbg_dim * uvbg_dim;
+    int local_ni[3];
+    local_ni[0] = (int)(UVBGgrids.slab_ni[3*this_rank]);
+    local_ni[1] = (int)(UVBGgrids.slab_ni[3*this_rank + 1]);
+    local_ni[2] = (int)(UVBGgrids.slab_ni[3*this_rank + 2]);
+    int slab_n_real = local_ni[0] * local_ni[1] * local_ni[2];
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
     
     //MAKE SURE THESE ARE PRIVATE IN THREADED LOOPS
@@ -577,6 +690,7 @@ static void find_HII_bubbles()
 
     // This parameter choice is sensitive to noise on the cell size, at least for the typical
     // cell sizes in RT simulations. It probably doesn't matter for larger cell sizes.
+    // TODO(jdavies): look into the units here and apply a UnitLength_in_blahblah factor, I think this is meant to switch on 1Mpc resolution
     if ((box_size / (double)uvbg_dim) < 1.0) // Fairly arbitrary length based on 2 runs Sobacchi did
         cell_length_factor = 1.0;
 
@@ -593,19 +707,19 @@ static void find_HII_bubbles()
 
     // Forward fourier transform to obtain k-space fields
     float* deltax = UVBGgrids.deltax;
-    fftwf_complex* deltax_unfiltered = (fftwf_complex*)deltax; // WATCH OUT!
-    fftwf_complex* deltax_filtered = UVBGgrids.deltax_filtered;
-    fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, deltax, deltax_unfiltered);
+    pfftf_complex* deltax_unfiltered = (pfftf_complex*)deltax; // WATCH OUT!
+    pfftf_complex* deltax_filtered = UVBGgrids.deltax_filtered;
+    pfftf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, deltax, deltax_unfiltered);
 
     float* stars_slab = UVBGgrids.stars_slab;
-    fftwf_complex* stars_slab_unfiltered = (fftwf_complex*)stars_slab; // WATCH OUT!
-    fftwf_complex* stars_slab_filtered = UVBGgrids.stars_slab_filtered;
-    fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, stars_slab, stars_slab_unfiltered);
+    pfftf_complex* stars_slab_unfiltered = (pfftf_complex*)stars_slab; // WATCH OUT!
+    pfftf_complex* stars_slab_filtered = UVBGgrids.stars_slab_filtered;
+    pfftf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, stars_slab, stars_slab_unfiltered);
 
     float* sfr = UVBGgrids.sfr;
-    fftwf_complex* sfr_unfiltered = (fftwf_complex*)sfr; // WATCH OUT!
-    fftwf_complex* sfr_filtered = UVBGgrids.sfr_filtered;
-    fftwf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, sfr, sfr_unfiltered);
+    pfftf_complex* sfr_unfiltered = (pfftf_complex*)sfr; // WATCH OUT!
+    pfftf_complex* sfr_filtered = UVBGgrids.sfr_filtered;
+    pfftf_execute_dft_r2c(UVBGgrids.plan_dft_r2c, sfr, sfr_unfiltered);
 
     // Remember to add the factor of VOLUME/TOT_NUM_PIXELS when converting from real space to k-space
     // Note: we will leave off factor of VOLUME, in anticipation of the inverse FFT below
@@ -650,28 +764,40 @@ static void find_HII_bubbles()
         //message(0, "filter step R = %.3e, Rmax = %.3e, Rmin = %.3e, delta = %.3e\n",R,ReionRBubbleMax,ReionRBubbleMin,ReionDeltaRFactor);
 
         // copy the k-space grids
-        memcpy(deltax_filtered, deltax_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-        memcpy(stars_slab_filtered, stars_slab_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
-        memcpy(sfr_filtered, sfr_unfiltered, sizeof(fftwf_complex) * slab_n_complex);
+        memcpy(deltax_filtered, deltax_unfiltered, sizeof(pfftf_complex) * slab_n_complex);
+        memcpy(stars_slab_filtered, stars_slab_unfiltered, sizeof(pfftf_complex) * slab_n_complex);
+        memcpy(sfr_filtered, sfr_unfiltered, sizeof(pfftf_complex) * slab_n_complex);
 
         // do the filtering unless this is the last filter step
-        int local_ix_start = (int)(UVBGgrids.slab_ix_start[this_rank]);
+        int local_o_start[3];
+        local_o_start[0] = (int)(UVBGgrids.slab_o_start[3*this_rank]);
+        local_o_start[1] = (int)(UVBGgrids.slab_o_start[3*this_rank + 1]);
+        local_o_start[2] = (int)(UVBGgrids.slab_o_start[3*this_rank + 2]);
+        int local_i_start[3];
+        local_i_start[0] = (int)(UVBGgrids.slab_i_start[3*this_rank]);
+        local_i_start[1] = (int)(UVBGgrids.slab_i_start[3*this_rank + 1]);
+        local_i_start[2] = (int)(UVBGgrids.slab_i_start[3*this_rank + 2]);
+        int local_no[3];
+        local_no[0] = (int)(UVBGgrids.slab_no[3*this_rank]);
+        local_no[1] = (int)(UVBGgrids.slab_no[3*this_rank + 1]);
+        local_no[2] = (int)(UVBGgrids.slab_no[3*this_rank + 2]);
+        
         if (!flag_last_filter_step) {
-            filter(deltax_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
-            filter(stars_slab_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
-            filter(sfr_filtered, local_ix_start, local_nix, uvbg_dim, (float)R);
+            filter(deltax_filtered, local_o_start, local_no, uvbg_dim, (float)R);
+            filter(stars_slab_filtered, local_o_start, local_no, uvbg_dim, (float)R);
+            filter(sfr_filtered, local_o_start, local_no, uvbg_dim, (float)R);
         }
 
         // inverse fourier transform back to real space
-        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, deltax_filtered, (float*)deltax_filtered);
-        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, stars_slab_filtered, (float*)stars_slab_filtered);
-        fftwf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, (float*)sfr_filtered);
+        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, deltax_filtered, deltax_filtered);
+        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, stars_slab_filtered, stars_slab_filtered);
+        pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, sfr_filtered);
 
         // Perform sanity checks to account for aliasing effects
         #pragma omp parallel for private(i_padded)
-        for (int ix = 0; ix < local_nix; ix++)
-            for (int iy = 0; iy < uvbg_dim; iy++)
-                for (int iz = 0; iz < uvbg_dim; iz++) {
+        for (int ix = 0; ix < local_ni[0]; ix++)
+            for (int iy = 0; iy < local_ni[1]; iy++)
+                for (int iz = 0; iz < local_ni[2]; iz++) {
                     i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                     ((float*)stars_slab_filtered)[i_padded] = fmaxf(((float*)stars_slab_filtered)[i_padded], 0.0f);
@@ -704,7 +830,7 @@ static void find_HII_bubbles()
         //     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
         //     big_file_mpi_create_block(&fout, &block, "deltax", "=f4", 1, n_ranks, uvbg_dim*uvbg_dim*uvbg_dim, MPI_COMM_WORLD);
         //     BigBlockPtr ptr = {0};
-        //     int start_elem = this_rank > 1 ? UVBGgrids.slab_nix[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
+        //     int start_elem = this_rank > 1 ? UVBGgrids.slab_ni[this_rank - 1]*uvbg_dim*uvbg_dim : 0;
         //     big_block_seek(&block, &ptr, start_elem);
         //     BigArray arr = {0};
         //     big_array_init(&arr, grid, "=f4", 1, (size_t[]){grid_size}, NULL);
@@ -723,9 +849,9 @@ static void find_HII_bubbles()
 
         // Main loop through the box...
         #pragma omp parallel for collapse(3) private(i_real,i_padded,density_over_mean,f_coll_stars,sfr_density)
-        for (int ix = 0; ix < local_nix; ix++)
-            for (int iy = 0; iy < uvbg_dim; iy++)
-                for (int iz = 0; iz < uvbg_dim; iz++) {
+        for (int ix = 0; ix < local_ni[0]; ix++)
+            for (int iy = 0; iy < local_ni[1]; iy++)
+                for (int iz = 0; iz < local_ni[2]; iz++) {
                     i_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
                     i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
 
@@ -746,12 +872,12 @@ static void find_HII_bubbles()
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
                         if (xHI[i_real] > FLOAT_REL_TOL) {
-                            const int i_grid_real = grid_index(ix + local_ix_start, iy, iz, uvbg_dim, INDEX_REAL);
+                            const int i_grid_real = grid_index(ix + local_i_start[0], iy + local_i_start[1], iz + local_i_start[2], uvbg_dim, INDEX_REAL);
                             J21[i_grid_real] = J21_aux;
                         }
 
                         // Mark as ionised
-                        xHI[i_real] = 0;
+                        xHI[i_real] = 0.;
 
                         // TODO(smutch): Do we want to implement this?
                         // r_bubble[i_real] = (float)R;
@@ -764,7 +890,7 @@ static void find_HII_bubbles()
 
                     // Check if new ionisation
                     // TODO: if this is needed we should make these grids permanent
-                    float* z_in = UVBGgrids.z_at_ionization;
+                    double* z_in = UVBGgrids.z_at_ionization;
                     if ((xHI[i_real] < FLOAT_REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
                     {
                         z_in[i_real] = (float)redshift;
@@ -812,9 +938,9 @@ static void find_HII_bubbles()
 
     //TODO: this directive is ridiculous and I doubt the parallelisation does much here
     #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI) reduction(+:density_over_mean) reduction(+:mass_weighted_global_xHI) reduction(+:mass_weight) private(i_real,i_padded)
-    for (int ix = 0; ix < local_nix; ix++)
-        for (int iy = 0; iy < uvbg_dim; iy++)
-            for (int iz = 0; iz < uvbg_dim; iz++) {
+    for (int ix = 0; ix < local_ni[0]; ix++)
+        for (int iy = 0; iy < local_ni[1]; iy++)
+            for (int iz = 0; iz < local_ni[2]; iz++) {
                 i_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
                 i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
                 volume_weighted_global_xHI += (double)xHI[i_real];
@@ -998,7 +1124,7 @@ void calculate_uvbg()
     // int this_rank;
     // int uvbg_dim = All.UVBGdim;
     // MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
-    // int local_nix = UVBGgrids.slab_nix[this_rank];
+    // int local_nix = UVBGgrids.slab_ni[this_rank];
     // int grid_size = (size_t)(local_nix * uvbg_dim * uvbg_dim);
     // float* grid = (float*)calloc(grid_size, sizeof(float));
     // for (int ii = 0; ii < local_nix; ii++)
