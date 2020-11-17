@@ -405,20 +405,20 @@ int find_UV_region(int* coords, ptrdiff_t* slab_i_start, ptrdiff_t* slab_ni, int
     endrun(0,"particle (%d,%d,%d) outside all UV regions???\n",coords[0],coords[1],coords[2]);
 }
 
-
-int grid_index(int i, int j, int k, int dim, index_type type)
+//NOTE: here "dim" is the local (y) size, "longdim" the unpadded, realspace (z) size
+int grid_index(int i, int j, int k, int dim, int longdim, index_type type)
 {
     int ind = -1;
 
     switch (type) {
     case INDEX_PADDED:
-        ind = k + (2 * (dim / 2 + 1)) * (j + dim * i);
+        ind = k + (2 * (longdim / 2 + 1)) * (j + dim * i);
         break;
     case INDEX_REAL:
-        ind = k + dim * (j + dim * i);
+        ind = k + longdim * (j + dim * i);
         break;
     case INDEX_COMPLEX_HERM:
-        ind = k + (dim / 2 + 1) * (j + dim * i);
+        ind = k + (longdim / 2 + 1) * (j + dim * i);
         break;
     default:
         endrun(1, "Unknown indexing type in `grid_index`.\n");
@@ -507,7 +507,7 @@ static void populate_grids()
                 int iy = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim) - ix_start[1];
                 int iz = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim) - ix_start[2];
 
-                int ind = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
+                int ind = grid_index(ix, iy, iz, nix[1], uvbg_dim, INDEX_REAL);
 
                 #pragma omp atomic update
                 buffer_mass[ind] += P[ii].Mass;
@@ -526,12 +526,12 @@ static void populate_grids()
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
         //TODO(jdavies): this is going to be a bad way to communicate data, find a better way to do strided reductions
-        //TODO(jdavies): if the above is impossible, can i thread this? I'm not sure if I can do threaded MPI communication
-        //NOTE: the 2D decomposition means that the largest contiguous blocks in memory will be niy*niz planes
+        //TODO(jdavies): build a buffer with dimensions of the padded grids, then reduce once straight onto the UVBGgrids struct
+        //TODO(jdavies): this essentially means reverse the order of this reduction and the assignment loop below
         for(int ix=0;ix<nix[0];ix++){
-            MPI_Reduce(UVBGgrids.stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, INDEX_REAL), buffer_stars_slab + grid_index(ix, 0, 0, nix[0], INDEX_REAL)
+            MPI_Reduce(UVBGgrids.stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, uvbg_dim, INDEX_REAL), buffer_stars_slab + grid_index(ix, 0, 0, nix[1], uvbg_dim, INDEX_REAL)
                     , nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-            MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, INDEX_REAL), buffer_sfr + grid_index(ix, 0, 0, nix[0], INDEX_REAL)
+            MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, uvbg_dim, INDEX_REAL), buffer_sfr + grid_index(ix, 0, 0, nix[1], uvbg_dim, INDEX_REAL)
                     , nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
             }
@@ -558,8 +558,8 @@ static void populate_grids()
                 for (int iy = 0; iy < slab_ni[3*i_r + 1]; iy++)
                     for (int iz = 0; iz < slab_ni[3*i_r + 2]; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
-                        const int ind_real = grid_index(ix, iy, iz, nix[0], INDEX_REAL);
-                        const int ind_pad = grid_index(ix, iy, iz, nix[0], INDEX_PADDED);
+                        const int ind_real = grid_index(ix, iy, iz, nix[1], uvbg_dim, INDEX_REAL);
+                        const int ind_pad = grid_index(ix, iy, iz, nix[1], uvbg_dim, INDEX_PADDED);
                         const float mass = buffer_mass[ind_real];
                         UVBGgrids.deltax[ind_pad] = mass * (float)deltax_conv_factor - 1.0f;
                         UVBGgrids.sfr[ind_pad] = buffer_sfr[ind_real];
@@ -610,7 +610,7 @@ static void filter(pfftf_complex* box, const int* local_o_start, const int* slab
                 k_y = n_y_global * delta_k;
 
             //TODO: make sure this is correct with padding etc
-            for (int n_z = 0; n_z <= slab_no[2]; n_z++) {
+            for (int n_z = 0; n_z < slab_no[2]; n_z++) {
                 float k_z = n_z * delta_k;
 
                 float k_mag = sqrtf(k_x * k_x + k_y * k_y + k_z * k_z);
@@ -620,18 +620,18 @@ static void filter(pfftf_complex* box, const int* local_o_start, const int* slab
                 switch (filter_type) {
                 case 0: // Real space top-hat
                     if (kR > 1e-4)
-                        box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] *= (pfftf_complex)(3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
+                        box[grid_index(n_x, n_y, n_z, slab_no[1], grid_dim, INDEX_COMPLEX_HERM)] *= (pfftf_complex)(3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
                     break;
 
                 case 1: // k-space top hat
                     kR *= 0.413566994; // Equates integrated volume to the real space top-hat (9pi/2)^(-1/3)
                     if (kR > 1)
-                        box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] = (pfftf_complex)0.0;
+                        box[grid_index(n_x, n_y, n_z, slab_no[1], grid_dim, INDEX_COMPLEX_HERM)] = (pfftf_complex)0.0;
                     break;
 
                 case 2: // Gaussian
                     kR *= 0.643; // Equates integrated volume to the real space top-hat
-                    box[grid_index(n_x, n_y, n_z, grid_dim, INDEX_COMPLEX_HERM)] *= (pfftf_complex)(pow(M_E,
+                    box[grid_index(n_x, n_y, n_z, slab_no[1], grid_dim, INDEX_COMPLEX_HERM)] *= (pfftf_complex)(pow(M_E,
                         (-kR * kR / 2.0)));
                     break;
 
@@ -831,11 +831,12 @@ static void find_HII_bubbles()
         pfftf_execute_dft_c2r(UVBGgrids.plan_dft_c2r, sfr_filtered, (float*)sfr_filtered);
 
         // Perform sanity checks to account for aliasing effects
+        // NOTE: these went from COMPLEX_HERM to PADDED dimensions (same size) after c2r
         #pragma omp parallel for private(i_padded)
         for (int ix = 0; ix < local_ni[0]; ix++)
             for (int iy = 0; iy < local_ni[1]; iy++)
                 for (int iz = 0; iz < local_ni[2]; iz++) {
-                    i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
+                    i_padded = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                     ((float*)stars_slab_filtered)[i_padded] = fmaxf(((float*)stars_slab_filtered)[i_padded], 0.0f);
                     ((float*)sfr_filtered)[i_padded] = fmaxf(((float*)sfr_filtered)[i_padded], 0.0f);
@@ -889,8 +890,8 @@ static void find_HII_bubbles()
         for (int ix = 0; ix < local_ni[0]; ix++)
             for (int iy = 0; iy < local_ni[1]; iy++)
                 for (int iz = 0; iz < local_ni[2]; iz++) {
-                    i_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
-                    i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
+                    i_real = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_REAL);
+                    i_padded = grid_index(ix, iy, iz, local_ni[1],uvbg_dim, INDEX_PADDED);
 
                     density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
 
@@ -909,7 +910,7 @@ static void find_HII_bubbles()
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
                         if (xHI[i_real] > FLOAT_REL_TOL) {
-                            const int i_grid_real = grid_index(ix + local_i_start[0], iy + local_i_start[1], iz + local_i_start[2], uvbg_dim, INDEX_REAL);
+                            const int i_grid_real = grid_index(ix + local_i_start[0], iy + local_i_start[1], iz + local_i_start[2], uvbg_dim, uvbg_dim, INDEX_REAL);
                             J21[i_grid_real] = J21_aux;
                         }
 
@@ -978,8 +979,8 @@ static void find_HII_bubbles()
     for (int ix = 0; ix < local_ni[0]; ix++)
         for (int iy = 0; iy < local_ni[1]; iy++)
             for (int iz = 0; iz < local_ni[2]; iz++) {
-                i_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
-                i_padded = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
+                i_real = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_REAL);
+                i_padded = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_PADDED);
                 volume_weighted_global_xHI += (double)xHI[i_real];
                 density_over_mean = 1.0 + (double)((float*)deltax_filtered)[i_padded];
                 mass_weighted_global_xHI += (double)(xHI[i_real]) * density_over_mean;

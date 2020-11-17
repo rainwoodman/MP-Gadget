@@ -182,7 +182,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     struct UVBG uvbg = {0};
     
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
-    double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], All.UVBGdim, INDEX_REAL)];
+    double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2], All.UVBGdim, All.UVBGdim, INDEX_REAL)];
     uvbg.J_UV = J21;
 
     //TODO(if local alpha desired, set J21 coeffs here with set_J21_coeffs(alpha)

@@ -557,7 +557,7 @@ static int make_particle_star(int child, int parent, int placement)
     // would have to re-make the union with J21 and reset the prev_stars stuff
     // or is this intentional, since where stars formed is more important for the reionisation field?
     if(All.ExcursionSetFlag)
-        UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], All.UVBGdim, INDEX_REAL)] += P[child].Mass;
+        UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], All.UVBGdim, All.UVBGdim, INDEX_REAL)] += P[child].Mass;
 
     return retflag;
 }
