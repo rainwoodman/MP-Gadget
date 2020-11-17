@@ -115,7 +115,7 @@ static void assign_slabs()
     // Allocations made in this function are free'd in `free_reionization_grids`.
 
     //TODO(jdavies): probably move the first half of this to an initialize function
-    //TODO: do I need to reinitialise this after petapm?
+    //TODO: do I need to reinitialise this after petapm? I don't see pfft_cleanup anywhere
     pfftf_init();
     pfftf_plan_with_nthreads(omp_get_max_threads());
 
@@ -196,7 +196,7 @@ static void assign_slabs()
     }*/
 
     //DEBUG STOP SO I CAN FIGURE OUT PFFT DECOMPOSITION TODO: REMOVE
-    endrun(0, "stopping here for debug\n");
+    //endrun(0, "stopping here for debug\n");
 }
 
 void malloc_permanent_uvbg_grids()
@@ -235,15 +235,17 @@ static void malloc_grids()
     ptrdiff_t slab_n_complex = UVBGgrids.slab_n_complex[this_rank];
     ptrdiff_t slab_n_real = UVBGgrids.slab_ni[3*this_rank] * UVBGgrids.slab_ni[3*this_rank + 1] * UVBGgrids.slab_ni[3*this_rank + 2];
   
-    //TODO(jdavies): look at single vs double precision here (was fftwf == floats)
-    //TODO(jdavies): also look at the padding, was this calculated by local_size earlier?
-    UVBGgrids.deltax = mymalloc("deltax", slab_n_real * sizeof(float));
+    //NOTES: slab_n_real for real grids calculated after inverse
+    //slab_n_complex for grids calculated in k-space that are inverse transformed (a bit bigger than slab_n_real/2)
+    //2 * slab_n_complex for real grids that are padded for in-place fft (a bit bigger than slab_n_real)
+    
+    UVBGgrids.deltax = mymalloc("deltax", 2*slab_n_complex * sizeof(float));
     UVBGgrids.deltax_filtered = (pfftf_complex *) mymalloc("deltax_filtered", slab_n_complex * sizeof(pfftf_complex));
-    UVBGgrids.stars_slab = mymalloc("stars_slab", slab_n_real * sizeof(float));
+    UVBGgrids.stars_slab = mymalloc("stars_slab", 2*slab_n_complex * sizeof(float));
     UVBGgrids.stars_slab_filtered = (pfftf_complex *) mymalloc("stars_slab_filtered", slab_n_complex * sizeof(pfftf_complex));
-    UVBGgrids.sfr = mymalloc("sfr", slab_n_real * sizeof(float));
+    UVBGgrids.sfr = mymalloc("sfr", 2*slab_n_complex * sizeof(float));
     UVBGgrids.sfr_filtered = (pfftf_complex *) mymalloc("sfr_filtered", slab_n_complex * sizeof(pfftf_complex));
-    UVBGgrids.xHI = mymalloc("sfr", slab_n_real * sizeof(float));
+    UVBGgrids.xHI = mymalloc("xHI", slab_n_real * sizeof(float));
     UVBGgrids.z_at_ionization = mymalloc("z_at_ion", slab_n_real * sizeof(float));
     UVBGgrids.J21_at_ionization = mymalloc("J21_at_ion", slab_n_real * sizeof(float));
 
@@ -274,12 +276,12 @@ static void free_grids()
     myfree(UVBGgrids.J21_at_ionization);
     myfree(UVBGgrids.z_at_ionization);
     myfree(UVBGgrids.xHI);
-    myfree(UVBGgrids.stars_slab);
+    myfree(UVBGgrids.sfr_filtered);
+    myfree(UVBGgrids.sfr);
     myfree(UVBGgrids.stars_slab_filtered);
+    myfree(UVBGgrids.stars_slab);
     myfree(UVBGgrids.deltax_filtered);
     myfree(UVBGgrids.deltax);
-    myfree(UVBGgrids.sfr);
-    myfree(UVBGgrids.sfr_filtered);
     
     myfree(UVBGgrids.slab_n_complex);
     myfree(UVBGgrids.slab_o_start);
@@ -372,16 +374,30 @@ static int searchsorted(void* val,
 //NOTE: this is less efficient than searchsorted, but works with the 3d decomp
 //TODO: optimize
 //ix_start is no longer guaranteed to be sorted, but there should only be one correct slab per coordinate
-int find_UV_region(int* coords, int* slab_i_start, int count)
+int find_UV_region(int* coords, ptrdiff_t* slab_i_start, ptrdiff_t* slab_ni, int count)
 {
+    int x_ll,y_ll,z_ll,x_ul,y_ul,z_ul;
     //count is number of slabs, not size of array
     for(int i=0;i<count;i++)
     {
-        if(coords[0] >= slab_i_start[3*i] && coords[0] < slab_i_start[3*(i+1)]
-                && coords[1] >= slab_i_start[3*i + 1] && coords[1] < slab_i_start[3*(i+1) + 1]
-                && coords[2] >= slab_i_start[3*i + 2] && coords[1] < slab_i_start[3*(i+1) + 2])
+        x_ll = slab_i_start[3*i];
+        y_ll = slab_i_start[3*i + 1];
+        z_ll = slab_i_start[3*i + 2];
+        x_ul = x_ll + slab_ni[3*i];
+        y_ul = y_ll + slab_ni[3*i + 1];
+        z_ul = z_ll + slab_ni[3*i + 2];
+        
+        /*if(!UVBGgrids.debug_printed){
+            message(0,"Slab %d from x=%d to %d, y=%d to %d, z=%d to %d\n",i,x_ll,x_ul,y_ll,y_ul,z_ll,z_ul);
+            message(0,"should be consistent with slab sizes ni = (%d,%d,%d) i_start = (%d,%d,%d)\n",i,slab_ni[3*i],slab_ni[3*i+1]
+                    ,slab_ni[3*i+2],slab_i_start[3*i],slab_i_start[3*i + 1],slab_i_start[3*i + 2]);
+        }*/
+        
+        if(coords[0] >= x_ll && coords[0] < x_ul
+                && coords[1] >= y_ll && coords[1] < y_ul
+                && coords[2] >= z_ll && coords[2] < z_ul)
         {
-
+            //UVBGgrids.debug_printed = 1;
             return i;
         }
     }
@@ -422,13 +438,22 @@ static void populate_grids()
     ptrdiff_t *slab_ni = UVBGgrids.slab_ni;
     ptrdiff_t *slab_i_start = UVBGgrids.slab_i_start;
 
+
     // create buffers on each rank which is as large as the largest LOGICAL allocation on any single rank
     int buffer_size = 0;
     for (int ii = 0; ii < nranks; ii++)
     {
-        int temp = (int)slab_ni[3*ii]*slab_ni[3*ii+1]*slab_ni[3*ii+2];
+        int temp = (int)(slab_ni[3*ii]*slab_ni[3*ii+1]*slab_ni[3*ii+2]);
         if (temp > buffer_size)
             buffer_size = temp;
+        /*message(0,"slab %d ni = (%d,%d,%d) total = %d, offset = (%d,%d,%d)\n"
+                ,ii,slab_ni[3*ii],slab_ni[3*ii+1],slab_ni[3*ii+2],slab_ni[3*ii]*slab_ni[3*ii+1]*slab_ni[3*ii+2]
+                ,slab_i_start[3*ii],slab_i_start[3*ii+1],slab_i_start[3*ii+2]);
+        int * temp_ni = (int*)slab_ni;
+        int * temp_st = (int*)slab_i_start;
+        message(0,"(after int casting) ni = (%d,%d,%d) total = %d, offset = (%d,%d,%d)\n"
+                ,temp_ni[3*ii],temp_ni[3*ii+1],temp_ni[3*ii+2],temp
+                ,temp_st[3*ii],temp_st[3*ii+1],temp_st[3*ii+2]);*/
     }
 
     float *buffer_mass = mymalloc("buffer_mass",(size_t)buffer_size * sizeof(float));
@@ -453,7 +478,7 @@ static void populate_grids()
             ix[1] = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim);
             ix[2] = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim);
             //UVRegionInd[ii] = searchsorted(&ix, slab_i_start, nranks, sizeof(ptrdiff_t), compare_ptrdiff, -1, -1);
-            UVRegionInd[ii] = find_UV_region(ix, (int*)slab_i_start, nranks);
+            UVRegionInd[ii] = find_UV_region(ix, slab_i_start, slab_ni, nranks);
         } else {
             UVRegionInd[ii] = -1;
         }
@@ -500,9 +525,19 @@ static void populate_grids()
         else
             MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
-        //TODO(jdavies): this is broken, find a way to reduce onto the right sub-cubes
-        MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        //TODO(jdavies): this is going to be a bad way to communicate data, find a better way to do strided reductions
+        //TODO(jdavies): if the above is impossible, can i thread this? I'm not sure if I can do threaded MPI communication
+        //NOTE: the 2D decomposition means that the largest contiguous blocks in memory will be niy*niz planes
+        for(int ix=0;ix<nix[0];ix++){
+            MPI_Reduce(UVBGgrids.stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, INDEX_REAL), buffer_stars_slab + grid_index(ix, 0, 0, nix[0], INDEX_REAL)
+                    , nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+            MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, INDEX_REAL), buffer_sfr + grid_index(ix, 0, 0, nix[0], INDEX_REAL)
+                    , nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+
+            }
+
+        //MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+        //MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
         
         // TODO(smutch): These could perhaps be precalculated?
         const float inv_dt = (float)(1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
@@ -523,8 +558,8 @@ static void populate_grids()
                 for (int iy = 0; iy < slab_ni[3*i_r + 1]; iy++)
                     for (int iz = 0; iz < slab_ni[3*i_r + 2]; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
-                        const int ind_real = grid_index(ix, iy, iz, uvbg_dim, INDEX_REAL);
-                        const int ind_pad = grid_index(ix, iy, iz, uvbg_dim, INDEX_PADDED);
+                        const int ind_real = grid_index(ix, iy, iz, nix[0], INDEX_REAL);
+                        const int ind_pad = grid_index(ix, iy, iz, nix[0], INDEX_PADDED);
                         const float mass = buffer_mass[ind_real];
                         UVBGgrids.deltax[ind_pad] = mass * (float)deltax_conv_factor - 1.0f;
                         UVBGgrids.sfr[ind_pad] = buffer_sfr[ind_real];
@@ -533,9 +568,10 @@ static void populate_grids()
         }
     }
 
+    myfree(UVRegionInd);
+    myfree(buffer_sfr);
     myfree(buffer_stars_slab);
     myfree(buffer_mass);
-    myfree(UVRegionInd);
 
     // set the last_a value so we can calulate dt for the SFR at the next call
     UVBGgrids.last_a = All.Time;
@@ -687,7 +723,7 @@ static void find_HII_bubbles()
     double hubble_time;
     //hubble time in internal units
     hubble_time = 1 / (hubble_function(&All.CP,All.Time) * All.CP.HubbleParam);
-    message(0,"hubble time is %.3e internal, %.3e s, %.3e Myr\n",hubble_time,hubble_time / All.UnitTime_in_s, hubble_time / All.UnitTime_in_Megayears);
+    message(0,"hubble time is %.3e internal, %.3e s, %.3e Myr\n",hubble_time,hubble_time * All.UnitTime_in_s, hubble_time * All.UnitTime_in_Megayears);
 
     // This parameter choice is sensitive to noise on the cell size, at least for the typical
     // cell sizes in RT simulations. It probably doesn't matter for larger cell sizes.
@@ -1113,12 +1149,16 @@ void calculate_uvbg()
     message(0, "Calculating UVBG grids.\n");
 
     assign_slabs();
+    message(0, "Slabs Assigned...\n");
     malloc_grids();
+    message(0, "Grids Allocated...\n");
     
     create_plans();
+    message(0, "Plans Created...\n");
     walltime_measure("/UVBG/create_plans");
 
     populate_grids();
+    message(0, "Grids Populated...\n");
     walltime_measure("/UVBG/populate_grids");
 
     // DEBUG =========================================================================================

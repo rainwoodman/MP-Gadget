@@ -25,7 +25,7 @@ WhichSpectrum = 2         # "1" selects Eisenstein & Hu spectrum,
                            # otherwise, Efstathiou parametrization is used
 
 # filename of tabulated input in Mpc/h
-FileWithInputSpectrum = /home/jdavies/MP-Gadget/MP-Gadget/examples/powerspectrum-wmap9.txt
+FileWithInputSpectrum = ../../powerspectrum-wmap9.txt
 
 PrimordialIndex = 0.971      # may be used to tilt the primordial index
 
