@@ -120,7 +120,7 @@ static void assign_slabs()
     pfftf_plan_with_nthreads(omp_get_max_threads());
 
     //TODO: have the flags stored somewhere so it's not both here and in create_plans
-    unsigned pfft_flags = PFFT_PADDED_R2C;
+    unsigned pfft_flags = PFFT_PADDED_R2C|PFFT_TRANSPOSED_NONE;
 
     // Assign the slab size
     int n_ranks;
@@ -233,7 +233,7 @@ static void malloc_grids()
     int this_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
     ptrdiff_t slab_n_complex = UVBGgrids.slab_n_complex[this_rank];
-    ptrdiff_t slab_n_real = UVBGgrids.slab_ni[3*this_rank] * UVBGgrids.slab_ni[3*this_rank + 1] * UVBGgrids.slab_ni[3*this_rank + 2];
+    ptrdiff_t slab_n_real = UVBGgrids.slab_ni[3*this_rank] * UVBGgrids.slab_ni[3*this_rank + 1] * All.UVBGdim;
   
     //NOTES: slab_n_real for real grids calculated after inverse
     //slab_n_complex for grids calculated in k-space that are inverse transformed (a bit bigger than slab_n_real/2)
@@ -245,6 +245,8 @@ static void malloc_grids()
     UVBGgrids.stars_slab_filtered = (pfftf_complex *) mymalloc("stars_slab_filtered", slab_n_complex * sizeof(pfftf_complex));
     UVBGgrids.sfr = mymalloc("sfr", 2*slab_n_complex * sizeof(float));
     UVBGgrids.sfr_filtered = (pfftf_complex *) mymalloc("sfr_filtered", slab_n_complex * sizeof(pfftf_complex));
+
+    //TODO: these grids were useful outputs in meraxes but are not used here yet
     UVBGgrids.xHI = mymalloc("xHI", slab_n_real * sizeof(float));
     UVBGgrids.z_at_ionization = mymalloc("z_at_ion", slab_n_real * sizeof(float));
     UVBGgrids.J21_at_ionization = mymalloc("J21_at_ion", slab_n_real * sizeof(float));
@@ -440,10 +442,12 @@ static void populate_grids()
 
 
     // create buffers on each rank which is as large as the largest LOGICAL allocation on any single rank
+    // TODO: I need the unpadded dimensions here for the reduce, so I assume 2D decomp with z kept intact
+    // if I want to generalise I'll need to store unpadded dimensions somewhere
     int buffer_size = 0;
     for (int ii = 0; ii < nranks; ii++)
     {
-        int temp = (int)(slab_ni[3*ii]*slab_ni[3*ii+1]*slab_ni[3*ii+2]);
+        int temp = (int)(slab_ni[3*ii]*slab_ni[3*ii+1]*uvbg_dim);
         if (temp > buffer_size)
             buffer_size = temp;
         /*message(0,"slab %d ni = (%d,%d,%d) total = %d, offset = (%d,%d,%d)\n"
@@ -528,11 +532,12 @@ static void populate_grids()
         //TODO(jdavies): this is going to be a bad way to communicate data, find a better way to do strided reductions
         //TODO(jdavies): build a buffer with dimensions of the padded grids, then reduce once straight onto the UVBGgrids struct
         //TODO(jdavies): this essentially means reverse the order of this reduction and the assignment loop below
+        //TODO(jdavies): replaced nix[1]*nix[2] with nix[1]*uvbg_dim because i need the unbuffered dimension, this will break in any z decomposition
         for(int ix=0;ix<nix[0];ix++){
             MPI_Reduce(UVBGgrids.stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, uvbg_dim, INDEX_REAL), buffer_stars_slab + grid_index(ix, 0, 0, nix[1], uvbg_dim, INDEX_REAL)
-                    , nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+                    , nix[1]*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
             MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix+ix_start[0], ix_start[1], 0, uvbg_dim, uvbg_dim, INDEX_REAL), buffer_sfr + grid_index(ix, 0, 0, nix[1], uvbg_dim, INDEX_REAL)
-                    , nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
+                    , nix[1]*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
 
             }
 
@@ -556,7 +561,7 @@ static void populate_grids()
             #pragma omp parallel for collapse(3)
             for (int ix = 0; ix < slab_ni[3*i_r]; ix++)
                 for (int iy = 0; iy < slab_ni[3*i_r + 1]; iy++)
-                    for (int iz = 0; iz < slab_ni[3*i_r + 2]; iz++) {
+                    for (int iz = 0; iz < uvbg_dim; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
                         const int ind_real = grid_index(ix, iy, iz, nix[1], uvbg_dim, INDEX_REAL);
                         const int ind_pad = grid_index(ix, iy, iz, nix[1], uvbg_dim, INDEX_PADDED);
@@ -672,12 +677,13 @@ static void create_plans()
     int uvbg_dim = All.UVBGdim;
     ptrdiff_t n[3] = {uvbg_dim,uvbg_dim,uvbg_dim};
     //TODO: have the flags stored somewhere so it's not both here and in assign_slabs
-    unsigned pfft_flags = PFFT_PADDED_R2C;
 
-    UVBGgrids.plan_dft_r2c = pfftf_plan_dft_r2c_3d(n,UVBGgrids.deltax,
-            (pfftf_complex*)UVBGgrids.deltax,UVBGgrids.comm_cart_2d,PFFT_FORWARD,pfft_flags|PFFT_PATIENT);
-    UVBGgrids.plan_dft_c2r = pfftf_plan_dft_c2r_3d(n,(pfftf_complex*)UVBGgrids.deltax
-            ,UVBGgrids.deltax,MPI_COMM_WORLD,PFFT_BACKWARD,pfft_flags|PFFT_PATIENT);
+    UVBGgrids.plan_dft_r2c = pfftf_plan_dft_r2c_3d(n, UVBGgrids.deltax,
+            (pfftf_complex*)UVBGgrids.deltax, UVBGgrids.comm_cart_2d,
+            PFFT_FORWARD, PFFT_PADDED_R2C|PFFT_PATIENT|PFFT_TRANSPOSED_NONE);
+    UVBGgrids.plan_dft_c2r = pfftf_plan_dft_c2r_3d(n, (pfftf_complex*)UVBGgrids.deltax,
+            UVBGgrids.deltax, UVBGgrids.comm_cart_2d,
+            PFFT_BACKWARD, PFFT_PADDED_C2R|PFFT_PATIENT|PFFT_TRANSPOSED_NONE);
 }
 
 static void destroy_plans()
@@ -704,11 +710,15 @@ static void find_HII_bubbles()
     double pixel_volume = pow(box_size / (double)uvbg_dim, 3); // (Mpc/h)^3 comoving
     double cell_length_factor = 0.620350491;
     double total_n_cells = pow((double)uvbg_dim, 3);
-    int local_ni[3];
-    local_ni[0] = (int)(UVBGgrids.slab_ni[3*this_rank]);
-    local_ni[1] = (int)(UVBGgrids.slab_ni[3*this_rank + 1]);
-    local_ni[2] = (int)(UVBGgrids.slab_ni[3*this_rank + 2]);
-    int slab_n_real = local_ni[0] * local_ni[1] * local_ni[2];
+    
+    //get the shapes of the local blocks
+
+    const int local_i_start[3] = {UVBGgrids.slab_i_start[3*this_rank],UVBGgrids.slab_i_start[3*this_rank + 1],UVBGgrids.slab_i_start[3*this_rank + 2]};
+    const int local_ni[3] = {UVBGgrids.slab_ni[3*this_rank],UVBGgrids.slab_ni[3*this_rank + 1],UVBGgrids.slab_ni[3*this_rank + 2]};
+    const int local_o_start[3] = {UVBGgrids.slab_o_start[3*this_rank],UVBGgrids.slab_o_start[3*this_rank + 1],UVBGgrids.slab_o_start[3*this_rank + 2]};
+    const int local_no[3] = {UVBGgrids.slab_no[3*this_rank],UVBGgrids.slab_no[3*this_rank + 1],UVBGgrids.slab_no[3*this_rank + 2]};
+    
+    int slab_n_real = local_ni[0] * local_ni[1] * uvbg_dim;
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
     
     //MAKE SURE THESE ARE PRIVATE IN THREADED LOOPS
@@ -805,20 +815,8 @@ static void find_HII_bubbles()
         memcpy(stars_slab_filtered, stars_slab_unfiltered, sizeof(pfftf_complex) * slab_n_complex);
         memcpy(sfr_filtered, sfr_unfiltered, sizeof(pfftf_complex) * slab_n_complex);
 
-        // do the filtering unless this is the last filter step
-        int local_o_start[3];
-        local_o_start[0] = (int)(UVBGgrids.slab_o_start[3*this_rank]);
-        local_o_start[1] = (int)(UVBGgrids.slab_o_start[3*this_rank + 1]);
-        local_o_start[2] = (int)(UVBGgrids.slab_o_start[3*this_rank + 2]);
-        int local_i_start[3];
-        local_i_start[0] = (int)(UVBGgrids.slab_i_start[3*this_rank]);
-        local_i_start[1] = (int)(UVBGgrids.slab_i_start[3*this_rank + 1]);
-        local_i_start[2] = (int)(UVBGgrids.slab_i_start[3*this_rank + 2]);
-        int local_no[3];
-        local_no[0] = (int)(UVBGgrids.slab_no[3*this_rank]);
-        local_no[1] = (int)(UVBGgrids.slab_no[3*this_rank + 1]);
-        local_no[2] = (int)(UVBGgrids.slab_no[3*this_rank + 2]);
         
+        // do the filtering unless this is the last filter step
         if (!flag_last_filter_step) {
             filter(deltax_filtered, local_o_start, local_no, uvbg_dim, (float)R);
             filter(stars_slab_filtered, local_o_start, local_no, uvbg_dim, (float)R);
@@ -832,10 +830,11 @@ static void find_HII_bubbles()
 
         // Perform sanity checks to account for aliasing effects
         // NOTE: these went from COMPLEX_HERM to PADDED dimensions (same size) after c2r
+        // z-loop only goes to uvbg_dim to not loop over the padding
         #pragma omp parallel for private(i_padded)
         for (int ix = 0; ix < local_ni[0]; ix++)
             for (int iy = 0; iy < local_ni[1]; iy++)
-                for (int iz = 0; iz < local_ni[2]; iz++) {
+                for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_padded = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_PADDED);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
                     ((float*)stars_slab_filtered)[i_padded] = fmaxf(((float*)stars_slab_filtered)[i_padded], 0.0f);
@@ -885,11 +884,11 @@ static void find_HII_bubbles()
             * R * All.UnitLength_in_cm * ReionNionPhotPerBary / PROTONMASS
             * All.UnitMass_in_g / pow(All.UnitLength_in_cm, 3) / All.UnitTime_in_s;
 
-        // Main loop through the box...
+        // Main loop through the box... again not over the padding
         #pragma omp parallel for collapse(3) private(i_real,i_padded,density_over_mean,f_coll_stars,sfr_density)
         for (int ix = 0; ix < local_ni[0]; ix++)
             for (int iy = 0; iy < local_ni[1]; iy++)
-                for (int iz = 0; iz < local_ni[2]; iz++) {
+                for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_real = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_REAL);
                     i_padded = grid_index(ix, iy, iz, local_ni[1],uvbg_dim, INDEX_PADDED);
 
@@ -978,7 +977,7 @@ static void find_HII_bubbles()
     #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI) reduction(+:density_over_mean) reduction(+:mass_weighted_global_xHI) reduction(+:mass_weight) private(i_real,i_padded)
     for (int ix = 0; ix < local_ni[0]; ix++)
         for (int iy = 0; iy < local_ni[1]; iy++)
-            for (int iz = 0; iz < local_ni[2]; iz++) {
+            for (int iz = 0; iz < uvbg_dim; iz++) {
                 i_real = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_REAL);
                 i_padded = grid_index(ix, iy, iz, local_ni[1], uvbg_dim, INDEX_PADDED);
                 volume_weighted_global_xHI += (double)xHI[i_real];
