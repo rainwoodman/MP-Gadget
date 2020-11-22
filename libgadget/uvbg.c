@@ -443,6 +443,7 @@ static void populate_grids()
     int nranks = -1, this_rank = -1;
     MPI_Comm_size(MPI_COMM_WORLD, &nranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
+    //TODO:replace these with region structs gathered here
     ptrdiff_t *slab_ni = UVBGgrids.slab_ni;
     ptrdiff_t *slab_i_start = UVBGgrids.slab_i_start;
     //full grid strides
@@ -594,16 +595,12 @@ static void populate_grids()
 }
 
 
-static void filter(pfftf_complex* box, const int* local_o_start, const int* slab_no, const int grid_dim, const float R)
+static void filter(pfftf_complex* box, ptrdiff_t* local_o_start, ptrdiff_t* slab_no, ptrdiff_t* strides, const int grid_dim, const float R)
 {
     const int filter_type = uvbg_params.ReionFilterType;
     int middle = grid_dim / 2;
     float box_size = (float)All.BoxSize;
     float delta_k = (float)(2.0 * M_PI / box_size);
-    ptrdiff_t* strides = UVBGgrids.local_c_region.strides;
-    //ptrdiff_t* size = UVBGgrids.local_c_region.size;
-    //ptrdiff_t* offset = UVBGgrids.local_c_region.offset;
-
 
     // Loop through k-box
     // (jdavies): outer loop ONLY threaded here, not perfectly nested
@@ -724,24 +721,18 @@ static void find_HII_bubbles()
     double total_n_cells = pow((double)uvbg_dim, 3);
     
     //get the shapes of the local blocks
-    const int local_i_start[3] = {UVBGgrids.slab_i_start[3*this_rank],UVBGgrids.slab_i_start[3*this_rank + 1],UVBGgrids.slab_i_start[3*this_rank + 2]};
-    const int local_ni[3] = {UVBGgrids.slab_ni[3*this_rank],UVBGgrids.slab_ni[3*this_rank + 1],UVBGgrids.slab_ni[3*this_rank + 2]};
-    const int local_o_start[3] = {UVBGgrids.slab_o_start[3*this_rank],UVBGgrids.slab_o_start[3*this_rank + 1],UVBGgrids.slab_o_start[3*this_rank + 2]};
-    const int local_no[3] = {UVBGgrids.slab_no[3*this_rank],UVBGgrids.slab_no[3*this_rank + 1],UVBGgrids.slab_no[3*this_rank + 2]};
+    PetaPMRegion r_region = UVBGgrids.local_r_region;
+    PetaPMRegion c_region = UVBGgrids.local_c_region;
     
-    int slab_n_real = local_ni[0] * local_ni[1] * uvbg_dim;
+    int slab_n_real = r_region.size[0] * r_region.size[1] * uvbg_dim;
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
 
     //full grid strides
     ptrdiff_t grid_strides[3] = {uvbg_dim*uvbg_dim,uvbg_dim,1};
     //unpadded strides
-    ptrdiff_t slab_strides[3] = {uvbg_dim*local_ni[1],uvbg_dim,1};
-    PetaPMRegion r_region = UVBGgrids.local_r_region;
-    PetaPMRegion c_region = UVBGgrids.local_c_region;
+    ptrdiff_t slab_strides[3] = {uvbg_dim*r_region.size[1],uvbg_dim,1};
 
     /*for(int k=0;k<3;k++){
-        message(1,"dim %d, real local size = %d, offset = %d, region size = %d, offset = %d, strides = %d\n"
-                ,k,local_ni[k],local_i_start[k],r_region.size[k],r_region.offset[k],r_region.strides[k]);
         message(1,"dim %d, complex local size = %d, offset = %d, region size = %d, offset = %d, strides = %d\n"
                 ,k,local_no[k],local_o_start[k],c_region.size[k],c_region.offset[k],c_region.strides[k]);
 
@@ -844,9 +835,9 @@ static void find_HII_bubbles()
         
         // do the filtering unless this is the last filter step
         if (!flag_last_filter_step) {
-            filter(deltax_filtered, local_o_start, local_no, uvbg_dim, (float)R);
-            filter(stars_slab_filtered, local_o_start, local_no, uvbg_dim, (float)R);
-            filter(sfr_filtered, local_o_start, local_no, uvbg_dim, (float)R);
+            filter(deltax_filtered, c_region.offset, c_region.size, c_region.strides, uvbg_dim, (float)R);
+            filter(stars_slab_filtered, c_region.offset, c_region.size, c_region.strides, uvbg_dim, (float)R);
+            filter(sfr_filtered, c_region.offset, c_region.size, c_region.strides, uvbg_dim, (float)R);
         }
 
         // inverse fourier transform back to real space
@@ -858,8 +849,8 @@ static void find_HII_bubbles()
         // NOTE: these went from COMPLEX_HERM to PADDED dimensions (same size) after c2r
         // z-loop only goes to uvbg_dim to not loop over the padding
         #pragma omp parallel for private(i_padded)
-        for (int ix = 0; ix < local_ni[0]; ix++)
-            for (int iy = 0; iy < local_ni[1]; iy++)
+        for (int ix = 0; ix < r_region.size[0]; ix++)
+            for (int iy = 0; iy < r_region.size[1]; iy++)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_padded = grid_index(ix, iy, iz, r_region.strides);
                     ((float*)deltax_filtered)[i_padded] = fmaxf(((float*)deltax_filtered)[i_padded], -1 + FLOAT_REL_TOL);
@@ -912,8 +903,8 @@ static void find_HII_bubbles()
 
         // Main loop through the box... again not over the padding
         #pragma omp parallel for collapse(3) private(i_real,i_padded,density_over_mean,f_coll_stars,sfr_density)
-        for (int ix = 0; ix < local_ni[0]; ix++)
-            for (int iy = 0; iy < local_ni[1]; iy++)
+        for (int ix = 0; ix < r_region.size[0]; ix++)
+            for (int iy = 0; iy < r_region.size[1]; iy++)
                 for (int iz = 0; iz < uvbg_dim; iz++) {
                     i_real = grid_index(ix, iy, iz, slab_strides);
                     i_padded = grid_index(ix, iy, iz, r_region.strides);
@@ -935,7 +926,7 @@ static void find_HII_bubbles()
                     {
                         // If it is the first crossing of the ionisation barrier for this cell (largest R), let's record J21
                         if (xHI[i_real] > FLOAT_REL_TOL) {
-                            const int i_grid_real = grid_index(ix + local_i_start[0], iy + local_i_start[1], iz + local_i_start[2], grid_strides);
+                            const int i_grid_real = grid_index(ix + r_region.offset[0], iy + r_region.offset[1], iz + r_region.offset[2], grid_strides);
                             J21[i_grid_real] = J21_aux;
                         }
 
@@ -1001,8 +992,8 @@ static void find_HII_bubbles()
 
     //TODO: this directive is ridiculous and I doubt the parallelisation does much here
     #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI) reduction(+:density_over_mean) reduction(+:mass_weighted_global_xHI) reduction(+:mass_weight) private(i_real,i_padded)
-    for (int ix = 0; ix < local_ni[0]; ix++)
-        for (int iy = 0; iy < local_ni[1]; iy++)
+    for (int ix = 0; ix < r_region.size[0]; ix++)
+        for (int iy = 0; iy < r_region.size[1]; iy++)
             for (int iz = 0; iz < uvbg_dim; iz++) {
                 i_real = grid_index(ix, iy, iz, slab_strides);
                 i_padded = grid_index(ix, iy, iz, r_region.strides);
