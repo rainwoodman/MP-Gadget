@@ -114,11 +114,6 @@ static void assign_slabs()
     int uvbg_dim = All.UVBGdim;
     // Allocations made in this function are free'd in `free_reionization_grids`.
 
-    //TODO(jdavies): probably move the first half of this to an initialize function
-    //TODO: do I need to reinitialise this after petapm? I don't see pfft_cleanup anywhere
-    //pfftf_init();
-    //pfftf_plan_with_nthreads(omp_get_max_threads());
-
     //TODO: have the flags stored somewhere so it's not both here and in create_plans
     unsigned pfft_flags = PFFT_PADDED_R2C|PFFT_TRANSPOSED_NONE;
 
@@ -126,12 +121,10 @@ static void assign_slabs()
     int n_ranks;
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
 
-    //TODO(jdavies): check if pfft wants in or out dimensions here
     ptrdiff_t n[3] = {uvbg_dim,uvbg_dim,uvbg_dim};
     int np[2];
 
     /* try to find a square 2d decomposition */
-    //TODO(jdavies): ask Simeon about what this is/does and whether I need it
     int i;
     for(i = sqrt(n_ranks) + 1; i >= 0; i --) {
         if(n_ranks % i == 0) break;
@@ -155,18 +148,13 @@ static void assign_slabs()
     petapm_region_init_strides(local_r_region);
     petapm_region_init_strides(local_c_region);
     
-    /*message(1,"local_r_region strides are (%d,%d,%d)\n",local_r_region->strides[0],local_r_region->strides[1],local_r_region->strides[2]);
+    message(1,"local_r_region strides are (%d,%d,%d)\n",local_r_region->strides[0],local_r_region->strides[1],local_r_region->strides[2]);
     message(1,"local_c_region strides are (%d,%d,%d)\n",local_c_region->strides[0],local_c_region->strides[1],local_c_region->strides[2]);
     message(1,"slab size (%d) (%d,%d,%d) starting at (%d,%d,%d)\n Outputs size (%d,%d,%d) starting at (%d,%d,%d)\n"
            ,local_n_complex,local_r_region->size[0],local_r_region->size[1],local_r_region->size[2]
            ,local_r_region->offset[0],local_r_region->offset[1],local_r_region->offset[2]
            ,local_c_region->size[0],local_c_region->size[1],local_c_region->size[2]
            ,local_c_region->offset[0],local_c_region->offset[1],local_c_region->offset[2]);
-    message(1,"global size (%d,%d,%d) starting at (%d,%d,%d)\n Outputs size (%d,%d,%d) starting at (%d,%d,%d)\n"
-           ,UVBGgrids.local_r_region.size[0],UVBGgrids.local_r_region.size[1],UVBGgrids.local_r_region.size[2]
-           ,UVBGgrids.local_r_region.offset[0],UVBGgrids.local_r_region.offset[1],UVBGgrids.local_r_region.offset[2]
-           ,UVBGgrids.local_c_region.size[0],UVBGgrids.local_c_region.size[1],UVBGgrids.local_c_region.size[2]
-           ,UVBGgrids.local_c_region.offset[0],UVBGgrids.local_c_region.offset[1],UVBGgrids.local_c_region.offset[2]);*/
 
 
     // let every rank know...
@@ -189,15 +177,6 @@ static void assign_slabs()
     ptrdiff_t *slab_n_complex = mymalloc("slab_n_complex",sizeof(ptrdiff_t) * n_ranks); ///< array of allocation counts for every rank
     UVBGgrids.slab_n_complex = slab_n_complex;
     MPI_Allgather(&local_n_complex, sizeof(ptrdiff_t), MPI_BYTE, slab_n_complex, sizeof(ptrdiff_t), MPI_BYTE, MPI_COMM_WORLD);
-
-    for (int ii = 0; ii < n_ranks; ii++)
-    {
-        message(0,"rank %d got slab size (%d) (%d,%d,%d) starting at (%d,%d,%d)\n Outputs size (%d,%d,%d) starting at (%d,%d,%d)\n"
-                ,ii,slab_n_complex[ii],slab_ni[3*ii],slab_ni[3*ii+1],slab_ni[3*ii+2]
-                ,slab_i_start[3*ii],slab_i_start[3*ii+1],slab_i_start[3*ii+2]
-                ,slab_no[3*ii],slab_no[3*ii+1],slab_no[3*ii+2]
-                ,slab_o_start[3*ii],slab_o_start[3*ii+1],slab_o_start[3*ii+2]);
-    }
 }
 
 void malloc_permanent_uvbg_grids()
@@ -252,17 +231,6 @@ static void malloc_grids()
     UVBGgrids.z_at_ionization = mymalloc("z_at_ion", slab_n_real * sizeof(float));
     UVBGgrids.J21_at_ionization = mymalloc("J21_at_ion", slab_n_real * sizeof(float));
 
-    /*
-    UVBGgrids.deltax = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
-    UVBGgrids.deltax_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
-    UVBGgrids.stars_slab = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
-    UVBGgrids.stars_slab_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
-    UVBGgrids.sfr = fftwf_alloc_real((size_t)(slab_n_complex * 2));  // padded for in-place FFT
-    UVBGgrids.sfr_filtered = fftwf_alloc_complex((size_t)(slab_n_complex));
-    UVBGgrids.xHI = fftwf_alloc_real((size_t)slab_n_real);
-    UVBGgrids.z_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
-    UVBGgrids.J21_at_ionization = fftwf_alloc_real((size_t)(slab_n_real));
-    */
     // Init grids for which values persist for the entire simulation
     for(ptrdiff_t ii=0; ii < slab_n_real; ++ii) {
         UVBGgrids.z_at_ionization[ii] = -999.0f;
@@ -291,18 +259,6 @@ static void free_grids()
     myfree(UVBGgrids.slab_no);
     myfree(UVBGgrids.slab_i_start);
     myfree(UVBGgrids.slab_ni);
-
-    /*
-    fftwf_free(UVBGgrids.J21_at_ionization);
-    fftwf_free(UVBGgrids.z_at_ionization);
-    fftwf_free(UVBGgrids.xHI);
-    fftwf_free(UVBGgrids.stars_slab);
-    fftwf_free(UVBGgrids.stars_slab_filtered);
-    fftwf_free(UVBGgrids.deltax_filtered);
-    fftwf_free(UVBGgrids.deltax);
-    fftwf_free(UVBGgrids.sfr);
-    fftwf_free(UVBGgrids.sfr_filtered);
-    */
 }
 
 
@@ -391,45 +347,15 @@ int find_UV_region(int* coords, ptrdiff_t* slab_i_start, ptrdiff_t* slab_ni, int
         y_ul = y_ll + slab_ni[3*i + 1];
         //z_ul = z_ll + slab_ni[3*i + 2];
         
-        /*if(!UVBGgrids.debug_printed){
-            message(0,"Slab %d from x=%d to %d, y=%d to %d, z=%d to %d\n",i,x_ll,x_ul,y_ll,y_ul,z_ll,z_ul);
-            message(0,"should be consistent with slab sizes ni = (%d,%d,%d) i_start = (%d,%d,%d)\n",i,slab_ni[3*i],slab_ni[3*i+1]
-                    ,slab_ni[3*i+2],slab_i_start[3*i],slab_i_start[3*i + 1],slab_i_start[3*i + 2]);
-        }*/
-        
         if(coords[0] >= x_ll && coords[0] < x_ul
                 && coords[1] >= y_ll && coords[1] < y_ul)
                 //&& coords[2] >= z_ll && coords[2] < z_ul)
         {
-            //UVBGgrids.debug_printed = 1;
             return i;
         }
     }
     //this shouldn't happen
     endrun(0,"particle (%d,%d,%d) outside all UV regions???\n",coords[0],coords[1],coords[2]);
-}
-
-//NOTE: here "dim" is the local (y) size, "longdim" the unpadded, realspace (z) size
-int grid_index2(int i, int j, int k, int dim, int longdim, index_type type)
-{
-    int ind = -1;
-
-    switch (type) {
-    case INDEX_PADDED:
-        ind = k + (2 * (longdim / 2 + 1)) * (j + dim * i);
-        break;
-    case INDEX_REAL:
-        ind = k + longdim * (j + dim * i);
-        break;
-    case INDEX_COMPLEX_HERM:
-        ind = k + (longdim / 2 + 1) * (j + dim * i);
-        break;
-    default:
-        endrun(1, "Unknown indexing type in `grid_index`.\n");
-        break;
-    }
-
-    return ind;
 }
 
 int grid_index(int i, int j, int k, ptrdiff_t strides[3])
@@ -458,14 +384,6 @@ static void populate_grids()
         int temp = (int)(slab_ni[3*ii]*slab_ni[3*ii+1]*uvbg_dim);
         if (temp > buffer_size)
             buffer_size = temp;
-        /*message(0,"slab %d ni = (%d,%d,%d) total = %d, offset = (%d,%d,%d)\n"
-                ,ii,slab_ni[3*ii],slab_ni[3*ii+1],slab_ni[3*ii+2],slab_ni[3*ii]*slab_ni[3*ii+1]*slab_ni[3*ii+2]
-                ,slab_i_start[3*ii],slab_i_start[3*ii+1],slab_i_start[3*ii+2]);
-        int * temp_ni = (int*)slab_ni;
-        int * temp_st = (int*)slab_i_start;
-        message(0,"(after int casting) ni = (%d,%d,%d) total = %d, offset = (%d,%d,%d)\n"
-                ,temp_ni[3*ii],temp_ni[3*ii+1],temp_ni[3*ii+2],temp
-                ,temp_st[3*ii],temp_st[3*ii+1],temp_st[3*ii+2]);*/
     }
 
     float *buffer_mass = mymalloc("buffer_mass",(size_t)buffer_size * sizeof(float));
@@ -503,7 +421,7 @@ static void populate_grids()
         //unpadded strides
         ptrdiff_t slab_strides[3] = {uvbg_dim*nix[1],uvbg_dim,1};
 
-        // init the buffers
+        //init the buffers
         for (int ii = 0; ii < buffer_size; ii++) {
             buffer_mass[ii] = 0.f;
             buffer_stars_slab[ii] = 0.f;
