@@ -2,9 +2,13 @@
 #define UVBG_H
 
 #include <pfft.h>
+#include "petapm.h"
 #include "utils/paramset.h"
 
 struct UVBGgrids_type {
+    //These are the sizes and offsets of ALL ranks used in populate_grids
+    //TODO: gather this from regions in populate_grids instead of assign_slabs
+    //and then these can be removed
     ptrdiff_t *slab_ni;
     ptrdiff_t *slab_no;
     ptrdiff_t *slab_i_start;
@@ -14,6 +18,10 @@ struct UVBGgrids_type {
     //communicator for PFFT
     MPI_Comm comm_cart_2d;
 
+    //Using PetaPM regions here to store local sizes, offsets and strides
+    PetaPMRegion local_r_region;
+    PetaPMRegion local_c_region;
+    
     float *J21;
     float *prev_stars;
 
@@ -51,7 +59,7 @@ typedef enum index_type {
 } index_type;
 
 int pos_to_ngp(double x, double Offset, double side, int nx);
-int grid_index(int i, int j, int k, int dim, int longdim, index_type type);
+int grid_index(int i, int j, int k, ptrdiff_t strides[3]);
 double time_to_present(double a);
 void calculate_uvbg();
 void malloc_permanent_uvbg_grids();
