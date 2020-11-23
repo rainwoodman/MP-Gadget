@@ -27,23 +27,24 @@ struct UVBGgrids_type {
 
     float *stars;
 
-    float *deltax;
-    pfftf_complex *deltax_filtered;
-    float *stars_slab;
-    pfftf_complex *stars_slab_filtered;
-    float *sfr;
-    pfftf_complex *sfr_filtered;
+    double *deltax;
+    pfft_complex *deltax_filtered;
+    double *stars_slab;
+    pfft_complex *stars_slab_filtered;
+    double *sfr;
+    pfft_complex *sfr_filtered;
+    
     float *xHI;
     float *z_at_ionization;
     float *J21_at_ionization;
 
-    pfftf_plan plan_dft_r2c;
-    pfftf_plan plan_dft_c2r;
+    pfft_plan plan_dft_r2c;
+    pfft_plan plan_dft_c2r;
 
     double last_a;  //< Last called expansion factor
 
-    float volume_weighted_global_xHI;
-    float mass_weighted_global_xHI;
+    double volume_weighted_global_xHI;
+    double mass_weighted_global_xHI;
 
     //TODO(jdavies): remove this
     //this is a check for debug messages so i don't print them a million times
