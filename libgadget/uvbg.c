@@ -268,9 +268,9 @@ int pos_to_ngp(double x, double Offset, double side, int nx)
     double corrpos = x - Offset;
 
     //periodic box, corrpos now in [0,side] 
-    if (corrpos < 0)
+    while (corrpos < 0)
         corrpos += side;
-    if (corrpos > side)
+    while (corrpos > side)
         corrpos -= side;
     
     //find nearest gridpoint, NOTE: can round to [0,nx]
@@ -438,6 +438,9 @@ static void populate_grids()
                 int ix = pos_to_ngp(P[ii].Pos[0],PartManager->CurrentParticleOffset[0], box_size, uvbg_dim) - ix_start[0];
                 int iy = pos_to_ngp(P[ii].Pos[1],PartManager->CurrentParticleOffset[1], box_size, uvbg_dim) - ix_start[1];
                 int iz = pos_to_ngp(P[ii].Pos[2],PartManager->CurrentParticleOffset[2], box_size, uvbg_dim) - ix_start[2];
+ 
+                if(ix<0 || ix>nix[0] || iy<0 || iy>nix[1] || iz<0 || iz>uvbg_dim)
+                    endrun(0,"particle (%d,%d,%d) outside its UV region %d\n",ix,iy,iz,i_r);
 
                 int ind = grid_index(ix, iy, iz, slab_strides);
 
@@ -486,8 +489,8 @@ static void populate_grids()
             const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
             const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
             #pragma omp parallel for collapse(3)
-            for (int ix = 0; ix < slab_ni[3*i_r]; ix++)
-                for (int iy = 0; iy < slab_ni[3*i_r + 1]; iy++)
+            for (int ix = 0; ix < nix[0]; ix++)
+                for (int iy = 0; iy < nix[1]; iy++)
                     for (int iz = 0; iz < uvbg_dim; iz++) {
                         // TODO(smutch): The buffer will need to be a double for precision...
                         const int ind_real = grid_index(ix, iy, iz, slab_strides);
@@ -534,7 +537,7 @@ static void filter(pfftf_complex* box, ptrdiff_t* local_o_start, ptrdiff_t* slab
 
         for (int n_y = 0; n_y < slab_no[1]; n_y++) {
             float k_y;
-            int n_y_global = n_x + local_o_start[1];
+            int n_y_global = n_y + local_o_start[1];
 
             if (n_y_global > middle)
                 k_y = (n_y_global - grid_dim) * delta_k;
