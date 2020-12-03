@@ -372,23 +372,23 @@ static void populate_grids()
     //TODO:replace these with region structs gathered here
     ptrdiff_t *slab_ni = UVBGgrids.slab_ni;
     ptrdiff_t *slab_i_start = UVBGgrids.slab_i_start;
+    ptrdiff_t *slab_n_complex = UVBGgrids.slab_n_complex;
     //full grid strides
     ptrdiff_t grid_strides[3] = {uvbg_dim*uvbg_dim,uvbg_dim,1};
 
-    // create buffers on each rank which is as large as the largest LOGICAL allocation on any single rank
-    // TODO: I need the unpadded dimensions here for the reduce, so I assume 2D decomp with z kept intact
-    // if I want to generalise I'll need to store unpadded dimensions somewhere
+    // create buffers on each rank which is as large as the largest allocation on any single rank
+    // NOTE: buffers are padded now because I build them before reducing onto each rank
     int buffer_size = 0;
     for (int ii = 0; ii < nranks; ii++)
     {
-        int temp = (int)(slab_ni[3*ii]*slab_ni[3*ii+1]*uvbg_dim);
+        int temp = (int)(2*slab_n_complex[ii]);
         if (temp > buffer_size)
             buffer_size = temp;
     }
 
-    float *buffer_mass = mymalloc("buffer_mass",(size_t)buffer_size * sizeof(float));
-    float *buffer_stars_slab = mymalloc("buffer_stars_slab",(size_t)buffer_size * sizeof(float));
-    float *buffer_sfr = mymalloc("buffer_sfr",(size_t)buffer_size * sizeof(float));
+    double *buffer_mass = mymalloc("buffer_mass",(size_t)buffer_size * sizeof(double));
+    double *buffer_stars_slab = mymalloc("buffer_stars_slab",(size_t)buffer_size * sizeof(double));
+    double *buffer_sfr = mymalloc("buffer_sfr",(size_t)buffer_size * sizeof(double));
 
     //RegionInd no longer global, allocate array for slab decomposition (Jdavies)
     int *UVRegionInd = mymalloc("UVRegionInd",sizeof(int) * PartManager->NumPart);
@@ -414,12 +414,13 @@ static void populate_grids()
         }
     }
 
-
     for (int i_r = 0; i_r < nranks; i_r++) {
         const int ix_start[3] = {slab_i_start[3*i_r],slab_i_start[3*i_r + 1],slab_i_start[3*i_r + 2]};
         const int nix[3] = {slab_ni[3*i_r],slab_ni[3*i_r + 1],slab_ni[3*i_r + 2]};
-        //unpadded strides
-        ptrdiff_t slab_strides[3] = {uvbg_dim*nix[1],uvbg_dim,1};
+        //TODO: gather this from local_r_region instead of calculating
+        //TODO: this is part of removing the ix globals in UVBGgrids
+        ptrdiff_t slab_strides[3] = {nix[2]*nix[1],nix[2],1};
+        ptrdiff_t n_complex = slab_n_complex[i_r];
 
         //init the buffers
         for (int ii = 0; ii < buffer_size; ii++) {
@@ -450,58 +451,45 @@ static void populate_grids()
                 count_mass++;
             }
         }
-
         message(0, "Added %d particles to mass grid.\n", count_mass);
 
-        // reduce on to the correct rank
-        if (this_rank == i_r) {
-            MPI_Reduce(MPI_IN_PLACE, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        }
-        else
-            MPI_Reduce(buffer_mass, buffer_mass, buffer_size, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-
-        //TODO(jdavies): this is going to be a bad way to communicate data, find a better way to do strided reductions
-        //TODO(jdavies): build a buffer with dimensions of the padded grids, then reduce once straight onto the UVBGgrids struct
-        //TODO(jdavies): this essentially means reverse the order of this reduction and the assignment loop below
-        //TODO(jdavies): replaced nix[1]*nix[2] with nix[1]*uvbg_dim because i need the unbuffered dimension, this will break in any z decomposition
-        for(int ix=0;ix<nix[0];ix++){
-            MPI_Reduce(UVBGgrids.stars + grid_index(ix+ix_start[0], ix_start[1], 0, grid_strides), buffer_stars_slab + grid_index(ix, 0, 0, slab_strides)
-                    , nix[1]*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-            MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix+ix_start[0], ix_start[1], 0, grid_strides), buffer_sfr + grid_index(ix, 0, 0, slab_strides)
-                    , nix[1]*uvbg_dim, MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-            }
-
-        //MPI_Reduce(UVBGgrids.stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_stars_slab, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        //MPI_Reduce(UVBGgrids.prev_stars + grid_index(ix_start, 0, 0, uvbg_dim, INDEX_REAL), buffer_sfr, nix[0]*nix[1]*nix[2], MPI_FLOAT, MPI_SUM, i_r, MPI_COMM_WORLD);
-        
         // TODO(smutch): These could perhaps be precalculated?
         const double inv_dt = (1.0 / (time_to_present(UVBGgrids.last_a) - time_to_present(All.Time)));
         message(0, "UVBG calculation dt = %.2e Myr\n", (1.0 / inv_dt));
 
-        // currently buffer_sfr is equal to prev_stars (see above MPI_Reduce), so we subtract the star buffer
-        // and divide by the time between now the last calculation to get the sfr
-        #pragma omp parallel for
-        for(int ii=0; ii < buffer_size; ii++) {
-            buffer_sfr[ii] = (buffer_stars_slab[ii] - buffer_sfr[ii]) * (float)inv_dt / All.UnitTime_in_Megayears;
-        }
+        //build the star buffers
+        #pragma omp parallel for collapse(3)
+        for (int ix = 0; ix < nix[0]; ix++)
+            for (int iy = 0; iy < nix[1]; iy++)
+                for (int iz = 0; iz < uvbg_dim; iz++) {
+                    const int ind_pad = grid_index(ix, iy, iz, slab_strides);
+                    const int ind_grid = grid_index(ix + ix_start[0],iy + ix_start[1],iz,grid_strides);
 
-        if (this_rank == i_r) {
-            const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
-            const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
-            #pragma omp parallel for collapse(3)
-            for (int ix = 0; ix < nix[0]; ix++)
-                for (int iy = 0; iy < nix[1]; iy++)
-                    for (int iz = 0; iz < uvbg_dim; iz++) {
-                        // TODO(smutch): The buffer will need to be a double for precision...
-                        const int ind_real = grid_index(ix, iy, iz, slab_strides);
-                        const int ind_pad = grid_index(ix, iy, iz, UVBGgrids.local_r_region.strides);
-                        const double mass = (double)buffer_mass[ind_real];
-                        UVBGgrids.deltax[ind_pad] = (mass * deltax_conv_factor - 1.0);
-                        UVBGgrids.sfr[ind_pad] = (double)buffer_sfr[ind_real];
-                        UVBGgrids.stars_slab[ind_pad] = (double)buffer_stars_slab[ind_real];
-                    }
-        }
+                    buffer_sfr[ind_pad] = UVBGgrids.stars[ind_grid] - UVBGgrids.prev_stars[ind_grid];
+                    buffer_stars_slab[ind_pad] = UVBGgrids.stars[ind_grid];
+                }
+
+        //reduce onto the correct rank
+        //NOTE: at this point deltax is a mass slab
+        MPI_Reduce(buffer_stars_slab, UVBGgrids.stars_slab, 2*n_complex, MPI_DOUBLE, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(buffer_sfr, UVBGgrids.sfr, 2*n_complex, MPI_DOUBLE, MPI_SUM, i_r, MPI_COMM_WORLD);
+        MPI_Reduce(buffer_mass, UVBGgrids.deltax, 2*n_complex, MPI_DOUBLE, MPI_SUM, i_r, MPI_COMM_WORLD);
     }
+
+    //convert mass to overdensity
+    const int nix[3] = {slab_ni[3*this_rank],slab_ni[3*this_rank + 1],slab_ni[3*this_rank + 2]};
+    ptrdiff_t slab_strides[3] = {nix[2]*nix[1],nix[2],1};
+    const double tot_n_cells = uvbg_dim * uvbg_dim * uvbg_dim;
+    const double deltax_conv_factor = tot_n_cells / (All.CP.RhoCrit * All.CP.Omega0 * All.BoxSize * All.BoxSize * All.BoxSize);
+
+    #pragma omp parallel for collapse(3)
+    for (int ix = 0; ix < nix[0]; ix++)
+        for (int iy = 0; iy < nix[0]; iy++)
+            for (int iz = 0; iz < uvbg_dim; iz++) {
+                const int ind_pad = grid_index(ix, iy, iz, slab_strides);
+                const double mass = UVBGgrids.deltax[ind_pad];
+                UVBGgrids.deltax[ind_pad] = (mass * deltax_conv_factor - 1.0);
+            }
 
     myfree(UVRegionInd);
     myfree(buffer_sfr);
