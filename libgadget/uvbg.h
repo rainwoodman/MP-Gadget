@@ -63,6 +63,7 @@ int pos_to_ngp(double x, double Offset, double side, int nx);
 int grid_index(int i, int j, int k, ptrdiff_t strides[3]);
 double time_to_present(double a);
 void calculate_uvbg();
+void calculate_uvbg_new();
 void malloc_permanent_uvbg_grids();
 void free_permanent_uvbg_grids();
 void save_uvbg_grids(int SnapshotFileCount);

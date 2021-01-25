@@ -84,6 +84,11 @@ typedef struct {
     int * RegionInd;
     int (*active) (int i);
     int NumPart;
+    /* added for reion */
+    size_t offset_type;
+    size_t offset_sfr;
+    size_t offset_pi;
+    void * Sphslot;
 } PetaPMParticleStruct;
 
 typedef void (*petapm_transfer_func)(PetaPM * pm, int64_t k2, int kpos[3], pfft_complex * value);
@@ -95,6 +100,9 @@ typedef struct {
     petapm_transfer_func transfer;
     petapm_readout_func readout;
 } PetaPMFunctions;
+
+/* Reion Loop function, applied after c2r, doesn't iterate over all particles*/
+typedef void (*petapm_reion_func)(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, double * mass_real, double * star_real, double * sfr_real);
 
 /* this mixes up fourier space analysis; with transfer. Shall split them. */
 typedef struct {
@@ -141,5 +149,14 @@ int petapm_mesh_to_k(PetaPM * pm, int i);
 int *petapm_get_thistask2d(PetaPM * pm);
 int *petapm_get_ntask2d(PetaPM * pm);
 pfft_complex * petapm_alloc_rhok(PetaPM * pm);
+
+void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
+        petapm_prepare_func prepare,
+        PetaPMGlobalFunctions * global_functions, //petapm_transfer_func global_transfer,
+        PetaPMFunctions * functions,
+        PetaPMParticleStruct * pstruct,
+        petapm_reion_func reion_loop,
+        double R_max, double R_min, double R_delta,
+        void * userdata);
 
 #endif

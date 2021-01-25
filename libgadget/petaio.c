@@ -262,8 +262,8 @@ void petaio_read_internal(char * fname, int ic, struct IOTable * IOTable, MPI_Co
     int64_t NLocal[6];
 
     /*Allocate Permanent UV grids*/
-    if(All.ExcursionSetFlag)
-        malloc_permanent_uvbg_grids();
+    //if(All.ExcursionSetFlag)
+    //    malloc_permanent_uvbg_grids();
 
     int NLocal[6];
     for(ptype = 0; ptype < 6; ptype ++) {
@@ -418,8 +418,8 @@ petaio_read_snapshot(int num, MPI_Comm Comm)
          * requires the last UV grid to be output
          * */
         //TODO (jdavies) make this not crash if the file doesn't exist:
-        if(All.ExcursionSetFlag)
-            read_star_grids(num);
+        //if(All.ExcursionSetFlag)
+            //read_star_grids(num);
 
     }
     myfree(fname);

@@ -144,6 +144,19 @@ run(int RestartSnapNum)
     int SnapshotFileCount = RestartSnapNum;
     PetaPM pm = {0};
     gravpm_init_periodic(&pm, All.BoxSize, All.Asmth, All.Nmesh, All.G);
+    
+    /*define excursion set PetaPM structs*/
+    /*because we need to FFT 3 grids, and we can't separate sets of regions, we need 3 PetaPM structs */
+    /*also, we will need different pencils and layouts due to different zero cells*/
+    /*NOTE: this produces three identical communicators TODO: write a quick way to give them all the same communicator*/    
+    PetaPM pm_mass = {0};
+    PetaPM pm_star = {0};
+    PetaPM pm_sfr = {0};
+    if(All.ExcursionSetFlag){
+        petapm_init(&pm_mass, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
+        petapm_init(&pm_star, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
+        petapm_init(&pm_sfr, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
+    }
 
     DomainDecomp ddecomp[1] = {0};
 
@@ -462,7 +475,7 @@ run(int RestartSnapNum)
         
         if(All.ExcursionSetFlag){
             if(CalcUVBG) {
-                calculate_uvbg();
+                calculate_uvbg_new(&pm_mass,&pm_star,&pm_sfr);
                 message(0,"uvbg calculated\n");
             }
             //TODO: incorporate into write_checkpoint with petaio

@@ -144,6 +144,7 @@ extern struct global_data_all_processes
     int UVBGdim;
     double AlphaUV;
     double UVBGTimestep;
+    double ExcursionSet_z_stop; 
     /*End Parameters for the Excursion Set Algorithm*/
 }
 All;
