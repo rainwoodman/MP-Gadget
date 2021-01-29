@@ -182,9 +182,6 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     struct UVBG uvbg = {0};
     
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
-    //ptrdiff_t grid_strides[3] = {All.UVBGdim*All.UVBGdim,All.UVBGdim,1};
-    //double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2],grid_strides)];
-    //double J21 = UVBGgrids.J21[grid_index(ind[0], ind[1], ind[2],grid_strides)];
     uvbg.J_UV = J21;
 
     //TODO(if local alpha desired, set J21 coeffs here with set_J21_coeffs(alpha)
@@ -213,7 +210,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
 
     //(jdavies) debugging messages, print's first particle's UVBG
-    /*if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
+    if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
     {
         message(0,"-----main UVBG for one particle-----\n");
         message(0,"J_UV = %e\n",uvbg.J_UV);
@@ -234,7 +231,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
         message(0,"epsHe0 = %e\n",J21toUV.epsHe0);
 
         UVBGgrids.debug_printed = 1;
-    }*/
+    }
 
     return uvbg;
 }

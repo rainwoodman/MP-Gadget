@@ -96,7 +96,7 @@ void set_sync_params(int OutputListLength, double * OutputListTimes)
  * integer stamps.
  **/
 void
-setup_sync_points(double TimeIC, double TimeMax, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF)
+setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStop, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF)
 {
     int i;
 
@@ -122,8 +122,9 @@ setup_sync_points(double TimeIC, double TimeMax, double UVBGTimestep, double no_
     // UVBG calculation every 10 Myr from z=20
     {
         double z_start = 20.;
+        double z_end = ExcursionSetZStop > TimeMax ? ExcursionSetZStop : TimeMax;
         double uv_a = 1.0 / (1.0 + z_start);
-        while (uv_a <= TimeMax) {
+        while (uv_a <= z_end) {
             SyncPoints[NSyncPoints].a = uv_a;
             SyncPoints[NSyncPoints].loga = log(uv_a);
             SyncPoints[NSyncPoints].write_snapshot = 0;
@@ -181,7 +182,7 @@ setup_sync_points(double TimeIC, double TimeMax, double UVBGTimestep, double no_
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
-            SyncPoints[j].calc_uvbg = 0;
+            SyncPoints[j].calc_uvbg = 1;
             if(SnapshotWithFOF) {
                 SyncPoints[j].write_fof = 1;
             }

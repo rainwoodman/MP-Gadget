@@ -29,7 +29,6 @@
 #include "cooling_rates.h"
 #include "cooling_qso_lightup.h"
 #include "cosmology.h"
-#include "uvbg.h"
 
 static struct cooling_units coolunits;
 

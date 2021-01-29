@@ -102,7 +102,7 @@ typedef struct {
 } PetaPMFunctions;
 
 /* Reion Loop function, applied after c2r, doesn't iterate over all particles*/
-typedef void (*petapm_reion_func)(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, double * mass_real, double * star_real, double * sfr_real);
+typedef void (*petapm_reion_func)(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, double * mass_real, double * star_real, double * sfr_real, int last_step);
 
 /* this mixes up fourier space analysis; with transfer. Shall split them. */
 typedef struct {

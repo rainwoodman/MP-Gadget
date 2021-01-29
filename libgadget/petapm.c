@@ -64,6 +64,7 @@ static PetaPMParticleStruct * CPS; /* stored by petapm_force, how to access the 
 /* (jdavies) reion defs */
 #define TYPE(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS->offset_type]))
 #define PI(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS->offset_pi]))
+/*TODO: this is a MyFloat*/
 #define SFR(i) ((double*)  (&((char*)CPS->Sphslot)[CPS->elsize * *PI(i) + CPS->offset_sfr]))
 
 PetaPMRegion * petapm_get_fourier_region(PetaPM * pm) {
@@ -444,6 +445,7 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
 
         double * star_real = (double * ) mymalloc2("star_real", pm_star->priv->fftsize * sizeof(double));
         double * sfr_real = (double * ) mymalloc2("sfr_real", pm_sfr->priv->fftsize * sizeof(double));
+        
         pfft_execute_dft_c2r(pm_mass->priv->plan_back, mass_filtered, mass_real);
         pfft_execute_dft_c2r(pm_star->priv->plan_back, star_filtered, star_real);
         pfft_execute_dft_c2r(pm_sfr->priv->plan_back, sfr_filtered, sfr_real);
@@ -456,7 +458,7 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         /* the reion loop calculates the J21 and stores it,
          * for now the mass_real grid will be reused to hold J21
          * on the last filtering step*/
-        reion_loop(pm_mass,pm_star,pm_sfr,mass_real,star_real,sfr_real);
+        reion_loop(pm_mass,pm_star,pm_sfr,mass_real,star_real,sfr_real,last_step);
 
         /* since we don't need to readout star and sfr grids...*/
         /* on the last step, the mass grid is populated with J21 and read out*/
@@ -501,6 +503,7 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     pfft_complex * star_unfiltered = petapm_force_r2c(pm_star, global_functions);
     pfft_complex * sfr_unfiltered = petapm_force_r2c(pm_sfr, global_functions);
     
+    
     //TODO: need custom reion_c2r to implement the 3 grid c2r and readout
     //the readout is only performed on the mass grid so for now I only pass in regions/Nregions for mass
     if(functions)
@@ -508,21 +511,22 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
                mass_unfiltered, star_unfiltered, sfr_unfiltered,
                regions_mass, Nregions_mass, functions, reion_loop,
                R_max, R_min, R_delta);
-
-    myfree(mass_unfiltered);
-    myfree(star_unfiltered);
+    
+    
     myfree(sfr_unfiltered);
+    myfree(star_unfiltered);
+    myfree(mass_unfiltered);
     
     if(CPS->RegionInd)
         myfree(CPS->RegionInd);
     
-    myfree(regions_mass);
-    myfree(regions_star);
     myfree(regions_sfr);
+    myfree(regions_star);
+    myfree(regions_mass);
 
-    petapm_force_finish(pm_mass);
-    petapm_force_finish(pm_star);
     petapm_force_finish(pm_sfr);
+    petapm_force_finish(pm_star);
+    petapm_force_finish(pm_mass);
 }
 
 

@@ -405,6 +405,7 @@ run(int RestartSnapNum)
             /**** radiative cooling and star formation *****/
             if(All.CoolingOn)
                 cooling_and_starformation(&Act, &Tree, GradRho, FdSfr);
+            
 
             if(GradRho) {
                 myfree(GradRho);
@@ -475,13 +476,15 @@ run(int RestartSnapNum)
         
         if(All.ExcursionSetFlag){
             if(CalcUVBG) {
-                calculate_uvbg_new(&pm_mass,&pm_star,&pm_sfr);
+                calculate_uvbg(&pm_mass,&pm_star,&pm_sfr);
                 message(0,"uvbg calculated\n");
-            }
-            //TODO: incorporate into write_checkpoint with petaio
-            if(WriteSnapshot) {
-                save_uvbg_grids(SnapshotFileCount);
-                message(0,"uvbg saved\n");
+
+                //TODO: incorporate into write_checkpoint with petaio
+                //if(WriteSnapshot) {
+                    //save_uvbg_grids(SnapshotFileCount);
+                    //message(0,"uvbg saved\n");
+                //}
+                myfree(UVBGgrids.J21);
             }
         }
 

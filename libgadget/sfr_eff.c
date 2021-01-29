@@ -31,7 +31,6 @@
 /*Only for the star slot reservation*/
 #include "forcetree.h"
 #include "domain.h"
-#include "uvbg.h"
 
 /*Parameters of the star formation model*/
 static struct SFRParams
@@ -538,20 +537,6 @@ static int make_particle_star(int child, int parent, int placement)
     int j;
     for(j = 0; j < NMETALS; j++)
         STARP(child).Metals[j] = oldslot.Metals[j];
-
-    // TODO(smutch): Use CIC
-    //int coord[3] = {0};
-    //for(int ii=0; ii<3; ii++) {
-    //    coord[ii] = pos_to_ngp(P[child].Pos[ii],PartManager->CurrentParticleOffset[ii], All.BoxSize, All.UVBGdim);
-    //}
-
-    // TODO(jdavies) account for drift in previous snapshots (populate each snap with mass?)
-    // would have to re-make the union with J21 and reset the prev_stars stuff
-    // or is this intentional, since where stars formed is more important for the reionisation field?
-    //if(All.ExcursionSetFlag){
-    //    ptrdiff_t grid_strides[3] = {All.UVBGdim*All.UVBGdim,All.UVBGdim,1};
-    //    UVBGgrids.stars[grid_index(coord[0], coord[1], coord[2], grid_strides)] += P[child].Mass;
-    //}
 
     return retflag;
 }
