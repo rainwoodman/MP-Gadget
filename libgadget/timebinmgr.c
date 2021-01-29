@@ -104,7 +104,7 @@ setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStop, doubl
 
     if(NSyncPoints > 0)
         myfree(SyncPoints);
-    //TODO(Jdavies): don't use syncpoints for uvbg calculation, or figure out how many are there beforehand
+    //TODO(Jdavies): figure out how many are there beforehand so we can malloc a list of the right size
     //z=20 to z=4 is ~150 syncpoints at 10 Myr spaces
     //
     SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2+400)); 
@@ -122,9 +122,9 @@ setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStop, doubl
     // UVBG calculation every 10 Myr from z=20
     {
         double z_start = 20.;
-        double z_end = ExcursionSetZStop > TimeMax ? ExcursionSetZStop : TimeMax;
+        double a_end = 1/(1+ExcursionSetZStop) > TimeMax ? 1/(1+ExcursionSetZStop) : TimeMax;
         double uv_a = 1.0 / (1.0 + z_start);
-        while (uv_a <= z_end) {
+        while (uv_a <= a_end) {
             SyncPoints[NSyncPoints].a = uv_a;
             SyncPoints[NSyncPoints].loga = log(uv_a);
             SyncPoints[NSyncPoints].write_snapshot = 0;

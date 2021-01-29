@@ -228,10 +228,6 @@ void save_uvbg_grids(int SnapshotFileCount)
    }
 }
 
-/*---------------NEW PETAPM BASED FUNCTIONS BELOW-------------*/
-/*---------------NEW PETAPM BASED FUNCTIONS BELOW-------------*/
-/*---------------NEW PETAPM BASED FUNCTIONS BELOW-------------*/
-
 //Simple region initialization (taken from zeldovich.c)
 //TODO: look into _prepare (gravpm.c) and see if its worth implementing anything there
 static PetaPMRegion * makeregion(PetaPM * pm, PetaPMParticleStruct * pstruct, void * userdata, int * Nregions) {
@@ -264,11 +260,13 @@ static PetaPMRegion * makeregion(PetaPM * pm, PetaPMParticleStruct * pstruct, vo
     return regions;
 }
 
+//this is applied as global_transfer, dividing by n_cells due to the forward-reverse FFT
 static void divide_by_ncell(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value){
         int total_n_cells = (double)(All.UVBGdim * All.UVBGdim * All.UVBGdim);
         *value /= total_n_cells;
 }
 
+//transfer functions that applies a certain filter (top-hat or gaussian)
 static void filter_pm(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value)
 {
     const int filter_type = uvbg_params.ReionFilterType;
@@ -299,6 +297,8 @@ static void filter_pm(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value)
     }
 }
 
+//takes filtered mass, star, sfr grids and calculates J21 and neutral fractions onto a grid
+//which is placed in the mass grid out on the last call of this function.
 static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         double * mass_real, double * star_real, double * sfr_real, int last_step)
 {
@@ -318,7 +318,6 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     const double ReionNionPhotPerBary = uvbg_params.ReionNionPhotPerBary;
     double alpha_uv = All.AlphaUV;
     double EscapeFraction = uvbg_params.EscapeFraction;
-
 
     // TODO(smutch): tidy this up!
     // The following is based on Sobacchi & Messinger (2013) eqn 7
@@ -485,6 +484,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
 
 }
 
+//readout J21 from grid to particle
 static void readout_J21(PetaPM * pm, int i, double * mesh, double weight) {
     if (P[i].Type == 0)
         SPHP(i).local_J21 += weight * mesh[0];
@@ -492,11 +492,12 @@ static void readout_J21(PetaPM * pm, int i, double * mesh, double weight) {
 
 //TODO:split up into more functions
 void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
-    
+    //setup filter radius range
     double Rmax = uvbg_params.ReionRBubbleMax;
     double Rmin = uvbg_params.ReionRBubbleMin;
     double Rdelta = uvbg_params.ReionDeltaRFactor;
     
+    //define particle structure with the info petapm needs
     PetaPMParticleStruct pstruct = {
         P,
         sizeof(P[0]),
@@ -513,8 +514,6 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
         SphP,
     };
 
-    /* need 3 sets of regions to hold the data
-     * NOTE: these regions are identical until filled */
     PetaPMGlobalFunctions global_functions = {NULL, NULL, divide_by_ncell};
     
     //TODO: set this up with all the filtering/reion loops

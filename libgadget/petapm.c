@@ -403,7 +403,8 @@ petapm_reion_init(
 
 /* differences from force c2r (why I think I need this separate)
  * radius loop (could do this with long list of same function + global R)
- * I'm pretty sure I need a third function type with all three grids, after c2r but iteration over the grid, instad of particles */
+ * I'm pretty sure I need a third function type (reion loop) with all three grids
+ * ,after c2r but iteration over the grid, instead of particles */
 void
 petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         pfft_complex * mass_unfiltered, pfft_complex * star_unfiltered, pfft_complex * sfr_unfiltered,
@@ -427,7 +428,8 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         if(R/R_delta < R_min || R/R_delta < (pm_mass->CellSize))
             last_step = 1;
 
-        //NOTE: The PetaPM structs for reionisation use the G variable for filter radius
+        //NOTE: The PetaPM structs for reionisation use the G variable for filter radius in order to use
+        //the transfer functions correctly
         pm_mass->G = R;
         pm_star->G = R;
         pm_sfr->G = R;
@@ -446,6 +448,7 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         double * star_real = (double * ) mymalloc2("star_real", pm_star->priv->fftsize * sizeof(double));
         double * sfr_real = (double * ) mymalloc2("sfr_real", pm_sfr->priv->fftsize * sizeof(double));
         
+        /* back to real space */
         pfft_execute_dft_c2r(pm_mass->priv->plan_back, mass_filtered, mass_real);
         pfft_execute_dft_c2r(pm_star->priv->plan_back, star_filtered, star_real);
         pfft_execute_dft_c2r(pm_sfr->priv->plan_back, sfr_filtered, sfr_real);
@@ -465,15 +468,13 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         myfree(sfr_real);
         myfree(star_real);
         
-        /* readout will:
-         * TODO: log particle z_at_reion
-         * attach current J21 to particles */
         R = R / R_delta;
     }
     //J21 grid is exchanged to pm_mass buffer and freed
     layout_build_and_exchange_cells_to_local(pm_mass, &pm_mass->priv->layout, pm_mass->priv->meshbuf, mass_real);
     walltime_measure("/PMreion/comm");
     //J21 read out to particles
+    //TODO: also read out z_at_ionisation
     pm_iterate(pm_mass, readout, regions, Nregions);
     walltime_measure("/PMreion/readout");
 }
@@ -489,22 +490,24 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         double R_max, double R_min, double R_delta,
         void * userdata) {
     
+    //assigning CPS here due to three sets of regions
     CPS = pstruct;
+
+    /* initialise regions for each grid
+     * NOTE: these regions should be identical except for the grid buffer */
     int Nregions_mass, Nregions_star, Nregions_sfr;
     PetaPMRegion * regions_mass = petapm_reion_init(pm_mass, prepare, put_particle_to_mesh, pstruct, &Nregions_mass, userdata);
     PetaPMRegion * regions_star = petapm_reion_init(pm_star, prepare, put_star_to_mesh, pstruct, &Nregions_star, userdata);
     PetaPMRegion * regions_sfr = petapm_reion_init(pm_sfr, prepare, put_sfr_to_mesh, pstruct, &Nregions_sfr, userdata);
 
-    //TODO: convert mass to delta here OR as part of the reion loop
-
     walltime_measure("/PMreion/comm2");
 
+    //using force r2c since this part can be done independently
     pfft_complex * mass_unfiltered = petapm_force_r2c(pm_mass, global_functions);
     pfft_complex * star_unfiltered = petapm_force_r2c(pm_star, global_functions);
     pfft_complex * sfr_unfiltered = petapm_force_r2c(pm_sfr, global_functions);
     
-    
-    //TODO: need custom reion_c2r to implement the 3 grid c2r and readout
+    //need custom reion_c2r to implement the 3 grid c2r and readout
     //the readout is only performed on the mass grid so for now I only pass in regions/Nregions for mass
     if(functions)
         petapm_reion_c2r(pm_mass, pm_star, pm_sfr,
@@ -512,7 +515,7 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
                regions_mass, Nregions_mass, functions, reion_loop,
                R_max, R_min, R_delta);
     
-    
+    //free everything in the correct order
     myfree(sfr_unfiltered);
     myfree(star_unfiltered);
     myfree(mass_unfiltered);
