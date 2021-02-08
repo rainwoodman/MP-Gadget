@@ -61,7 +61,7 @@ inttime_t out_from_ti(inttime_t ti);
 
 int OutputListAction(ParameterSet * ps, char * name, void * data);
 void set_sync_params(int OutputListLength, double * OutputListTimes);
-void setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStop, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF);
+void setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStart, double ExcursionSetZStop, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF);
 
 SyncPoint *
 find_next_sync_point(inttime_t ti);

@@ -39,13 +39,13 @@ static struct UVBGParams {
     double ReionRBubbleMin;
     double ReionDeltaRFactor;
     int ReionFilterType;
+    int RtoMFilterType;
 
     /*J21 calculation parameters*/
     double ReionGammaHaloBias;
     double ReionNionPhotPerBary;
     //double AlphaUV;
     double EscapeFraction;
-    //double ExcursionSetZStop;
 
 } uvbg_params;
 
@@ -59,6 +59,7 @@ void set_uvbg_params(ParameterSet * ps) {
     if(ThisTask==0)
     {
         uvbg_params.ReionFilterType = param_get_int(ps, "ReionFilterType");
+        uvbg_params.RtoMFilterType = param_get_int(ps, "RtoMFilterType");
         uvbg_params.ReionRBubbleMax = param_get_double(ps, "ReionRBubbleMax");
         uvbg_params.ReionRBubbleMin = param_get_double(ps, "ReionRBubbleMin");
         uvbg_params.ReionDeltaRFactor = param_get_double(ps, "ReionDeltaRFactor");
@@ -66,7 +67,6 @@ void set_uvbg_params(ParameterSet * ps) {
         uvbg_params.ReionNionPhotPerBary = param_get_double(ps, "ReionNionPhotPerBary");
         //uvbg_params.AlphaUV = param_get_double(ps, "AlphaUV");
         uvbg_params.EscapeFraction = param_get_double(ps, "EscapeFraction");
-        //uvbg_params.ExcursionSetZStop = param_get_double(ps, "ExcursionSetZStop");
     }
     MPI_Bcast(&uvbg_params, sizeof(struct UVBGParams), MPI_BYTE, 0, MPI_COMM_WORLD);
 
@@ -114,7 +114,7 @@ int grid_index(int i, int j, int k, ptrdiff_t strides[3])
 static double RtoM(double R)
 {
     // All in internal units
-    const int filter = 0;  // TODO(smutch): Make this an option
+    const int filter = uvbg_params.RtoMFilterType;
     double OmegaM = All.CP.Omega0;
     double RhoCrit = All.CP.RhoCrit;
 

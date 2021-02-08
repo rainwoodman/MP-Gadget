@@ -104,6 +104,7 @@ WindFreeTravelDensFac = 0.1
 #----------------------Reionisation stuff----------------
 ExcursionSetFlag = 1
 ExcursionSetZStop = 5
+ExcursionSetZStart = 25
 UVBGdim = 64
 ReionRBubbleMax = 20340 #kpc
 ReionRBubbleMin = 406.8
@@ -115,4 +116,5 @@ EscapeFraction = 1.0
 UVBGTimestep = 10.0 #time between UVBG calculations
 UVBGSaveGrids = 1 #save UVBG related grids directly from 21cmfast
 ReionFilterType = 0 #Filter to use with 21CMFAST, 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian
+RtoMFilterType = 0 #Filter to use with 21CMFAST RtoM calculation, 0 = top-hat, 1 = gaussian
 J21CoeffFile = ../../J21_to_rates_test.txt

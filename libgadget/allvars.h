@@ -145,6 +145,7 @@ extern struct global_data_all_processes
     double AlphaUV; //needed in cooling_uvfluc.c and uvbg.c
     double UVBGTimestep; //needed in init.c
     double ExcursionSetZStop; //needed in init.c
+    double ExcursionSetZStart; //needed in init.c
     /*End Parameters for the Excursion Set Algorithm*/
 }
 All;

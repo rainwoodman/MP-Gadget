@@ -12,6 +12,7 @@
 *new parameters:
 ..*ExcursionSetFlag : 0 or 1 to disable/enable the excursion set
 ..*ExcursionSetZStop : redshift at which the cooling code reverts to global ionising background
+..*ExcursionSetZStart : redshift at which the excursion set starts
 ..*UVBGdim : dimension of the excursion set grids (can be different from the force grids)
 ..*ReionRBubbleMax : largest filter radius for the excursion set
 ..*ReionRBubbleMin : smallest filter radius for the excursion set
@@ -22,6 +23,7 @@
 ..*EscapeFraction : escape fraction of photons from ionising sources
 ..*UVBGTimestep : time in Myr between UVBG timesteps
 ..*ReionFilterType : Filter to use with 21CMFAST, 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian
+..*RtoMFilterType : Filter to use with 21CMFAST radius to mass, 0 = top-hat, 1 = gaussian
 ..*J21CoeffFile : path to the table containing photo-ionisaiton and heating rates versus spectral slope at J21 == 1
 
 *With the small examples I have run so far (256^3 particles at 40Mpc) the excursion set does not take much time compared to the rest of the run
