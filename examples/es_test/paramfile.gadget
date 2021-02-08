@@ -103,6 +103,7 @@ WindFreeTravelDensFac = 0.1
 
 #----------------------Reionisation stuff----------------
 ExcursionSetFlag = 1
+ExcursionSetZStop = 5
 UVBGdim = 64
 ReionRBubbleMax = 20340 #kpc
 ReionRBubbleMin = 406.8

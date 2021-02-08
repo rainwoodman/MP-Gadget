@@ -170,21 +170,11 @@ struct UVBG _get_local_UVBG_from_global(double redshift, const struct UVBG * con
     return uvbg;
 }
 
-// TODO (jdavies): have some sort of flag to switch between UBVG models:
-// also, redshift and PosOffset argument not used yet
-static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const double * PosOffset, int heiiionized, double J21) {
-    /*int ind[3] = {-1};
-    for (int ii = 0; ii<3; ii++)
-    {
-        ind[ii] = pos_to_ngp(Pos[ii], PosOffset[ii], All.BoxSize, All.UVBGdim);
-    }*/
-
+static struct UVBG get_local_UVBG_from_J21(double redshift, int heiiionized, double J21) {
     struct UVBG uvbg = {0};
     
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
     uvbg.J_UV = J21;
-
-    //TODO(if local alpha desired, set J21 coeffs here with set_J21_coeffs(alpha)
 
     //TODO:(jdavies) check if helium should be ionised here (once/twice)
     //TODO:(jdavies) also check helium heating because there is a special case in the code
@@ -193,6 +183,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
     //it seems a bit wasteful to calculate this for every particle
     //but the global uv does an interpolation every time and this allows
     //for future inhomogeneous alpha
+    //if this becomes a bottleneck we can set the coeffs globally
     struct J21_coeffs J21toUV = get_J21_coeffs(All.AlphaUV);
 
     uvbg.gJH0   = J21toUV.gJH0 * J21; // s-1
@@ -239,9 +230,9 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double * Pos, const 
 //placeholder function so i don't have to delete old get_local_UVBG yet, or replace with a proper flag
 struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, int heiiionized, double J21)
 {
-    if(All.ExcursionSetFlag)
+    if(All.ExcursionSetFlag && (redshift > All.ExcursionSetZStop))
     {
-        return get_local_UVBG_from_J21(redshift,Pos,PosOffset,heiiionized,J21);
+        return get_local_UVBG_from_J21(redshift,heiiionized,J21);
     }
     else
     {
