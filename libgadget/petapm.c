@@ -474,7 +474,6 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     layout_build_and_exchange_cells_to_local(pm_mass, &pm_mass->priv->layout, pm_mass->priv->meshbuf, mass_real);
     walltime_measure("/PMreion/comm");
     //J21 read out to particles
-    //TODO: also read out z_at_ionisation
     pm_iterate(pm_mass, readout, regions, Nregions);
     walltime_measure("/PMreion/readout");
 }

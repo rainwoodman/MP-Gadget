@@ -293,6 +293,63 @@ static void filter_pm(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value)
     }
 }
 
+//print some statistics of the reion grids for debugging
+static void print_reion_debug_info(PetaPM * pm_mass, double * J21, double * xHI, double * mass_real, double * star_real, double * sfr_real)
+{
+    double min_J21 = 1e30;
+    double max_J21 = 0;
+    double min_mass = 1e30;
+    double max_mass = 0;
+    double min_star = 1e30;
+    double max_star = 0;
+    double min_sfr = 1e30;
+    double max_sfr = 0;
+    int neutral_count = 0;
+    int ion_count = 0;
+    int pm_idx = 0;
+    int uvbg_dim = All.UVBGdim;
+    int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+    #pragma omp parallel for collapse(3) reduction(+:neutral_count,ion_count) reduction(min:min_J21,min_mass,min_star,min_sfr) reduction(max:max_J21,max_mass,max_star,max_sfr) private(pm_idx)
+    for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
+        for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
+            for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
+                pm_idx = grid_index(ix, iy, iz, pm_mass->real_space_region.strides);
+
+                if(xHI[pm_idx] > 1 - FLOAT_REL_TOL)
+                    neutral_count += 1;
+                if(xHI[pm_idx] < FLOAT_REL_TOL)
+                    ion_count += 1;
+                min_J21 = min_J21 < J21[pm_idx] ? min_J21 : J21[pm_idx];
+                max_J21 = max_J21 > J21[pm_idx] ? max_J21 : J21[pm_idx];
+                min_mass = min_mass < mass_real[pm_idx] ? min_mass : mass_real[pm_idx];
+                max_mass = max_mass > mass_real[pm_idx] ? max_mass : mass_real[pm_idx];
+                min_star = min_star < star_real[pm_idx] ? min_star : star_real[pm_idx];
+                max_star = max_star > star_real[pm_idx] ? max_star : star_real[pm_idx];
+                min_sfr = min_sfr < sfr_real[pm_idx] ? min_sfr : sfr_real[pm_idx];
+                max_sfr = max_sfr > sfr_real[pm_idx] ? max_sfr : sfr_real[pm_idx];
+
+            }
+    MPI_Allreduce(MPI_IN_PLACE, &neutral_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &ion_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_J21, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &min_mass, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_mass, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &min_star, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_star, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &min_sfr, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &max_sfr, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    double n_ratio = (double)neutral_count / (double)grid_n_real;
+    double i_ratio = (double)ion_count / (double)grid_n_real;
+    
+    message(0,"neutral cells : %d, ion cells %d, ratio(%d) N %f ion %f\n",neutral_count, ion_count, grid_n_real, n_ratio, i_ratio);
+    message(0,"min J21 : %e | max J21 %e\n",min_J21,max_J21);
+    message(0,"min mass : %e | max mass %e\n",min_mass,max_mass);
+    message(0,"min star : %e | max star %e\n",min_star,max_star);
+    message(0,"min sfr : %e | max sfr %e\n",min_sfr,max_sfr);
+}
+
+
 //takes filtered mass, star, sfr grids and calculates J21 and neutral fractions onto a grid
 //which is placed in the mass grid out on the last call of this function.
 static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
@@ -330,7 +387,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     float* J21 = UVBGgrids.J21;
     float* xHI = UVBGgrids.xHI;
     
-    // Perform sanity checks to account for aliasing effects and convert mass to delta
+    // Perform sanity checks to account for aliasing effects
     #pragma omp parallel for collapse(3) private(pm_idx)
     for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
         for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
@@ -356,6 +413,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
             for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
                 pm_idx = grid_index(ix, iy, iz, pm_mass->real_space_region.strides);
 
+                //convert mass to delta
                 density_over_mean = mass_real[pm_idx] * deltax_conv_factor;
 
                 /*TODO: ask Simon about this part of the model where we use mass in a sphere of radius R
@@ -391,38 +449,24 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
                      xHI[pm_idx] = (float)(1.0 - f_coll_stars * ReionEfficiency);
                 }
                 
-
-                // Check if new ionisation
-                // TODO: if this is needed we need a new grid and readout function
-                //float* z_in = UVBGgrids.z_at_ionization;
-                //if ((xHI[i_real] < FLOAT_REL_TOL) && (z_in[i_real] < 0)) // New ionisation!
-                //{
-                //    z_in[i_real] = (float)redshift;
-                //    UVBGgrids.J21_at_ionization[i_real] = J21_aux * ReionGammaHaloBias;
-                //}
             } // iz
     // Find the volume and mass weighted neutral fractions
     // TODO: The deltax grid will have rounding errors from forward and reverse
     //       FFT. Should cache deltax slabs prior to ffts and reuse here.
-    // TODO: clean up all the debug here
+    // TODO: this could be put in the above loop
     if(last_step){
+
+#ifdef DEBUG
+        print_reion_debug_info(pm_mass,J21,xHI,mass_real,star_real,sfr_real);
+#endif
+
         double volume_weighted_global_xHI = 0.0;
         double mass_weighted_global_xHI = 0.0;
         double mass_weight = 0.0;
         int uvbg_dim = All.UVBGdim;
         int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
-        double min_J21 = 1e30;
-        double max_J21 = 0;
-        double min_mass = 1e30;
-        double max_mass = 0;
-        double min_star = 1e30;
-        double max_star = 0;
-        double min_sfr = 1e30;
-        double max_sfr = 0;
-        int neutral_count = 0;
-        int ion_count = 0;
         //TODO: this directive is ridiculous and I doubt the parallelisation does much here
-        #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI,density_over_mean,neutral_count,ion_count) reduction(min:min_J21,min_mass,min_star,min_sfr) reduction(max:max_J21,max_mass,max_star,max_sfr) private(pm_idx)
+        #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI,mass_weighted_global_xHI,mass_weight) private(pm_idx,density_over_mean)
         for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
             for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
                 for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
@@ -433,18 +477,6 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
                     mass_weighted_global_xHI += (double)(xHI[pm_idx]) * density_over_mean;
                     mass_weight += density_over_mean;
 
-                    if(xHI[pm_idx] > 1 - FLOAT_REL_TOL)
-                        neutral_count += 1;
-                    if(xHI[pm_idx] < FLOAT_REL_TOL)
-                        ion_count += 1;
-                    min_J21 = min_J21 < J21[pm_idx] ? min_J21 : J21[pm_idx];
-                    max_J21 = max_J21 > J21[pm_idx] ? max_J21 : J21[pm_idx];
-                    min_mass = min_mass < mass_real[pm_idx] ? min_mass : mass_real[pm_idx];
-                    max_mass = max_mass > mass_real[pm_idx] ? max_mass : mass_real[pm_idx];
-                    min_star = min_star < star_real[pm_idx] ? min_star : star_real[pm_idx];
-                    max_star = max_star > star_real[pm_idx] ? max_star : star_real[pm_idx];
-                    min_sfr = min_sfr < sfr_real[pm_idx] ? min_sfr : sfr_real[pm_idx];
-                    max_sfr = max_sfr > sfr_real[pm_idx] ? max_sfr : sfr_real[pm_idx];
                     //if we are on the last step, we re_use the mass grid to store J21 so it can be read out
                     mass_real[pm_idx] = (double)(J21[pm_idx]);
                 }
@@ -456,28 +488,9 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         volume_weighted_global_xHI /= grid_n_real;
         mass_weighted_global_xHI /= mass_weight;
         UVBGgrids.volume_weighted_global_xHI = volume_weighted_global_xHI;
-        //UVBGgrids.mass_weighted_global_xHI = mass_weighted_global_xHI;
+        UVBGgrids.mass_weighted_global_xHI = mass_weighted_global_xHI;
         message(0,"vol weighted xhi : %f\n",volume_weighted_global_xHI);
         message(0,"mass weighted xhi : %f\n",mass_weighted_global_xHI);
-
-        MPI_Allreduce(MPI_IN_PLACE, &neutral_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &ion_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &max_J21, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &min_mass, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &max_mass, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &min_star, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &max_star, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &min_sfr, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
-        MPI_Allreduce(MPI_IN_PLACE, &max_sfr, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
-        double n_ratio = (double)neutral_count / (double)grid_n_real;
-        double i_ratio = (double)ion_count / (double)grid_n_real;
-    
-        message(0,"neutral cells : %d, ion cells %d, ratio(%d) N %f ion %f\n",neutral_count, ion_count, grid_n_real, n_ratio, i_ratio);
-        message(0,"min J21 : %e | max J21 %e\n",min_J21,max_J21);
-        message(0,"min mass : %e | max mass %e\n",min_mass,max_mass);
-        message(0,"min star : %e | max star %e\n",min_star,max_star);
-        message(0,"min sfr : %e | max sfr %e\n",min_sfr,max_sfr);
     }
 
 }
@@ -543,6 +556,9 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
 
     message(0, "Away to call find_HII_bubbles...\n");
     petapm_reion(pm_mass,pm_star,pm_sfr,makeregion,&global_functions,functions,&pstruct,reion_loop_pm,Rmax,Rmin,Rdelta,NULL);
+
+    //TODO: a particle loop that detects new ionisations, saves J21_at_ion and z_at_ion
+    //TODO: multiply J21_at_ion with halo bias??
 
     myfree(UVBGgrids.xHI);
     //TODO(jdavies):remove this

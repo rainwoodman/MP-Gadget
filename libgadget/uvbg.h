@@ -9,16 +9,12 @@ struct UVBGgrids_type {
     float *J21;
 
     float *xHI;
-    //float *z_at_ionization;
-    //float *J21_at_ionization;
-
-    //double last_a;  //< Last called expansion factor
 
     double volume_weighted_global_xHI;
     double mass_weighted_global_xHI;
 
     //TODO(jdavies): remove this
-    //this is a check for debug messages so i don't print them a million times
+    //this is a check for debug messages so i can print UVBG for a single particle
     int debug_printed;
 };
 
