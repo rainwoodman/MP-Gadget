@@ -21,6 +21,7 @@ struct particle_data
     struct {
         /* particle type.  0=gas, 1=halo, 2=disk, 3=bulge, 4=stars, 5=bndry */
         //unsigned int Type                 :4;
+        unsigned int                      :4; /* UNUSED bits put here to maintain bit alignment */
 
         unsigned int IsGarbage            :1; /* True for a garbage particle. readonly: Use slots_mark_garbage to mark this.*/
         unsigned int Swallowed            :1; /* True if the particle is being swallowed; used in BH to determine swallower and swallowee;*/

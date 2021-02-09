@@ -401,6 +401,9 @@ petapm_reion_init(
     return regions;
 }
 
+/* 30Mpc to 0.5 Mpc with a delta of 1.1 is ~50 iterations, this should be more than enough*/
+#define MAX_R_ITERATIONS 10000
+
 /* differences from force c2r (why I think I need this separate)
  * radius loop (could do this with long list of same function + global R)
  * I'm pretty sure I need a third function type (reion loop) with all three grids
@@ -417,6 +420,7 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     PetaPMFunctions * f = functions;
     double R = fmin(R_max,pm_mass->BoxSize);
     int last_step = 0;
+    int f_count = 0;
     petapm_transfer_func transfer = f->transfer;
     petapm_readout_func readout = f->readout;
    
@@ -424,9 +428,11 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     double * mass_real = (double * ) mymalloc2("mass_real", pm_mass->priv->fftsize * sizeof(double));
 
     //TODO: add CellLengthFactor for lowres (>1Mpc, see old find_HII_bubbles function)
-    while (!last_step) {
-        if(R/R_delta < R_min || R/R_delta < (pm_mass->CellSize))
+    while(!last_step) {
+        f_count++;
+        if(R/R_delta < R_min || R/R_delta < (pm_mass->CellSize) || f_count > MAX_R_ITERATIONS)
             last_step = 1;
+            R = pm_mass->CellSize;
 
         //NOTE: The PetaPM structs for reionisation use the G variable for filter radius in order to use
         //the transfer functions correctly
@@ -440,9 +446,15 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         pfft_complex * sfr_filtered = (pfft_complex *) mymalloc("sfr_filtered", pm_sfr->priv->fftsize * sizeof(double));
 
         /* apply the filtering at this radius */
+        /*We want the last step to be unfiltered,
+         *  calling apply transfer with NULL should just copy the grids */
+
+        transfer = last_step ? NULL : f->transfer;
+
         pm_apply_transfer_function(pm_mass, mass_unfiltered, mass_filtered, transfer);
         pm_apply_transfer_function(pm_star, star_unfiltered, star_filtered, transfer);
         pm_apply_transfer_function(pm_sfr, sfr_unfiltered, sfr_filtered, transfer);
+
         walltime_measure("/PMreion/calc");
 
         double * star_real = (double * ) mymalloc2("star_real", pm_star->priv->fftsize * sizeof(double));
@@ -1105,9 +1117,8 @@ static void put_star_to_mesh(PetaPM * pm, int i, double * mesh, double weight) {
 #pragma omp atomic update
     mesh[0] += weight * Mass;
 }
-//TODO:finish sfr
 static void put_sfr_to_mesh(PetaPM * pm, int i, double * mesh, double weight) {
-    if(INACTIVE(i) || *TYPE(i) != 1)
+    if(INACTIVE(i) || *TYPE(i) != 0)
         return;
     double Sfr = *SFR(i);
 #pragma omp atomic update
