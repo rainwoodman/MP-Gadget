@@ -331,7 +331,7 @@ create_gadget_parameter_set()
     /*End parameters for the massive neutrino model*/
 
     /*Parameters for the Excursion Set Algorithm*/
-    param_declare_int(ps, "ExcursionSetFlag", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
+    param_declare_int(ps, "ExcursionSetReionOn", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
     param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Number of cells on a side of the excursion set grid. Resolution = BoxSize/UVBGdim");
     param_declare_int(ps, "ReionFilterType", OPTIONAL, 0, "Filter type for Excursion set: 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian");
     param_declare_int(ps, "RtoMFilterType", OPTIONAL, 0, "Filter type for radius to mass calculation: 0 = top-hat, 1 = gaussian");

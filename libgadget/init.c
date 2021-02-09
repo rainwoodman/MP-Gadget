@@ -115,7 +115,7 @@ set_init_params(ParameterSet * ps)
         /*End massive neutrino parameters*/
 
         /*Parameters for the Excursion Set Algorithm*/
-        All.ExcursionSetFlag = param_get_int(ps, "ExcursionSetFlag");
+        All.ExcursionSetReionOn = param_get_int(ps, "ExcursionSetReionOn");
         All.ExcursionSetZStop = param_get_double(ps, "ExcursionSetZStop");
         All.ExcursionSetZStart = param_get_double(ps, "ExcursionSetZStart");
         All.UVBGdim = param_get_int(ps, "UVBGdim");

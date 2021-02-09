@@ -140,7 +140,7 @@ extern struct global_data_all_processes
     int RandomSeed; /*Initial seed for the random number table*/
 
     /*Parameters for the Excursion Set Algorithm*/
-    int ExcursionSetFlag; //needed in run.c, cooling_uvfluc.c, and others
+    int ExcursionSetReionOn; //needed in run.c, cooling_uvfluc.c, and others
     int UVBGdim; //needed in run.c and uvbg.c 
     double AlphaUV; //needed in cooling_uvfluc.c and uvbg.c
     double UVBGTimestep; //needed in init.c

@@ -152,7 +152,7 @@ run(int RestartSnapNum)
     PetaPM pm_mass = {0};
     PetaPM pm_star = {0};
     PetaPM pm_sfr = {0};
-    if(All.ExcursionSetFlag){
+    if(All.ExcursionSetReionOn){
         petapm_init(&pm_mass, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
         petapm_init(&pm_star, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
         petapm_init(&pm_sfr, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
@@ -474,7 +474,7 @@ run(int RestartSnapNum)
             fof_finish(&fof);
         }
         
-        if(All.ExcursionSetFlag){
+        if(All.ExcursionSetReionOn){
             if(CalcUVBG) {
                 calculate_uvbg(&pm_mass,&pm_star,&pm_sfr);
                 message(0,"uvbg calculated\n");
