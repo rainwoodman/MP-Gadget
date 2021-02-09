@@ -430,9 +430,12 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     //TODO: add CellLengthFactor for lowres (>1Mpc, see old find_HII_bubbles function)
     while(!last_step) {
         f_count++;
+        //The last step will be unfiltered
         if(R/R_delta < R_min || R/R_delta < (pm_mass->CellSize) || f_count > MAX_R_ITERATIONS)
+        {
             last_step = 1;
             R = pm_mass->CellSize;
+        }
 
         //NOTE: The PetaPM structs for reionisation use the G variable for filter radius in order to use
         //the transfer functions correctly
@@ -491,7 +494,11 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
 }
 
 /* We need a slightly different flow for reionisation, so I 
- * will define these here instead of messing with the force functions*/
+ * will define these here instead of messing with the force functions.
+ * The c2r function is the same, however we need a new function, reion_loop
+ * to run over all three filtered grids, after the inverse transform.
+ * The c2r function itself is also different since we need to apply the
+ * transfer (filter) function on all three grids and run reion_loop before any readout.*/
 void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         petapm_prepare_func prepare,
         PetaPMGlobalFunctions * global_functions, //petapm_transfer_func global_transfer,

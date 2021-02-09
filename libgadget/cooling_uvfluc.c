@@ -176,9 +176,6 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, int heiiionized, dou
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
     uvbg.J_UV = J21;
 
-    //TODO:(jdavies) check if helium should be ionised here (once/twice)
-    //TODO:(jdavies) also check helium heating because there is a special case in the code
-    
     //interpolators in cooling_rates.c should now be rate coeffs
     //it seems a bit wasteful to calculate this for every particle
     //but the global uv does an interpolation every time and this allows
@@ -191,17 +188,20 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, int heiiionized, dou
     uvbg.gJHe0  = J21toUV.gJHe0 * J21; // s-1
     uvbg.epsHe0 = J21toUV.epsHe0 * J21 * 1.60218e-12;  // erg s-1
 
-    //TODO:look more into the qso_lightup model to see if this is correct
-    //TODO: set heating to be consistent with qso model, which activates long_mfp_heating
-    //a self-consistent approach probably needs separate stellar/quasar rates, H+ He+, He++ spectral slopes
-    if(heiiionized){
-        uvbg.gJHep  = J21toUV.gJHep * J21; // s-1
-        uvbg.epsHep = J21toUV.epsHep * J21 * 1.60218e-12;  // erg s-1
-    }
+    /*Since the excursion set only finds HII (& HeII) bubbles, and HeII -> HeIII
+     * heating is taken care of by the qso_lightup model, there is never a case where we need these rates */
+    /* NOTE: this means that the excursion set will be switched off before helium reionisation
+     * and global rates must be used, otherwise helium will not ionise or heat */
+    /* the excursion set (so far) only includes stellar ionising radiation, so
+     * this is equivalent to the assumption that stars do not doubly ionise helium
+     * which will need to change if we decide to add QSO radiation to the excursion set (i.e Qin et al. 2017, DRAGONS X)*/
+    uvbg.gJHep = 0.;
+    uvbg.epsHep = 0.;
+
     uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
 
-    //(jdavies) debugging messages, print's first particle's UVBG
 #ifdef DEBUG
+    //(jdavies) debugging messages, print's first particle's UVBG
     if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
     {
         message(0,"-----main UVBG for one particle-----\n");
@@ -229,16 +229,19 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, int heiiionized, dou
     return uvbg;
 }
 
-//placeholder function so i don't have to delete old get_local_UVBG yet, or replace with a proper flag
+//switch function that decides whether to use excursion set or global UV background
+/*TODO: there are a few continuity issues to consider fixing.
+ * switching to the global rates for heii ionised particles is discontinuous.
+ * if the z_reion tables provided finish after ExcursionSetZStop, particles could rapidly recombine.
+ * I'm not sure how initial heating from reionisation (see D'Aloisio et al. 2019) is handled here */
 struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, int heiiionized, double J21)
 {
-    if(All.ExcursionSetReionOn && (redshift > All.ExcursionSetZStop))
+    if(All.ExcursionSetReionOn && (redshift > All.ExcursionSetZStop) && !(heiiionized))
     {
         return get_local_UVBG_from_J21(redshift,heiiionized,J21);
     }
     else
     {
-        //(jdavies): I'm assuming the global UVBG properly deals with heii ionization, although i could modify it
         return get_local_UVBG_from_global(redshift,GlobalUVBG,Pos,PosOffset);
     }
 }

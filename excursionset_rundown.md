@@ -10,7 +10,7 @@
 ##Notes:
 
 *new parameters:
-..*ExcursionSetFlag : 0 or 1 to disable/enable the excursion set
+..*ExcursionSetReionOn : 0 or 1 to disable/enable the excursion set
 ..*ExcursionSetZStop : redshift at which the cooling code reverts to global ionising background
 ..*ExcursionSetZStart : redshift at which the excursion set starts
 ..*UVBGdim : dimension of the excursion set grids (can be different from the force grids)
