@@ -232,6 +232,14 @@ load_heii_reion_hist(const char * reion_hist_file)
     QSOLightupParams.heIIIreion_start = 1/He_zz[0]-1;
 
     message(0, "HeII: Read %d lines z_reion = %g - %g from file %s\n", Nreionhist, 1/He_zz[0] -1, 1/He_zz[Nreionhist-1]-1, reion_hist_file);
+
+    /* we can't have helium reionisation start while the excursion set
+     * is going, so we will stop the excursion set beforehand */
+    if(QSOLightupParams.heIIIreion_start > All.ExcursionSetZStop){
+        message(0,"Excursion set would stop during/after helium reionisation at %f, will now stop at %f\n",
+                All.ExcursionSetZStop,QSOLightupParams.heIIIreion_start);
+        All.ExcursionSetZStop = QSOLightupParams.heIIIreion_start;
+    }
 }
 
 void

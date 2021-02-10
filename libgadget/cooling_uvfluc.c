@@ -170,7 +170,7 @@ struct UVBG _get_local_UVBG_from_global(double redshift, const struct UVBG * con
     return uvbg;
 }
 
-static struct UVBG get_local_UVBG_from_J21(double redshift, int heiiionized, double J21) {
+static struct UVBG get_local_UVBG_from_J21(double redshift, double J21) {
     struct UVBG uvbg = {0};
     
     // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
@@ -234,11 +234,11 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, int heiiionized, dou
  * switching to the global rates for heii ionised particles is discontinuous.
  * if the z_reion tables provided finish after ExcursionSetZStop, particles could rapidly recombine.
  * I'm not sure how initial heating from reionisation (see D'Aloisio et al. 2019) is handled here */
-struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, int heiiionized, double J21)
+struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, double J21)
 {
-    if(All.ExcursionSetReionOn && (redshift > All.ExcursionSetZStop) && !(heiiionized))
+    if(All.ExcursionSetReionOn && (redshift > All.ExcursionSetZStop))
     {
-        return get_local_UVBG_from_J21(redshift,heiiionized,J21);
+        return get_local_UVBG_from_J21(redshift,J21);
     }
     else
     {
