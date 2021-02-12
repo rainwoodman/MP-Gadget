@@ -29,6 +29,7 @@
 #include "petapm.h"
 #include "physconst.h"
 #include "walltime.h"
+#include "petaio.h"
 
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
@@ -131,97 +132,88 @@ static double RtoM(double R)
     return -1;
 }
 
-//TODO: save with parallel functions so we can save all ranks
-void save_uvbg_grids(int SnapshotFileCount)
+void save_uvbg_grids(int SnapshotFileCount, PetaPM * pm)
 {
     int n_ranks;
     int this_rank=-1;
-    int uvbg_dim = All.UVBGdim;
-    int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
+    int grid_n = pm->real_space_region.size[0] * pm->real_space_region.size[1] * pm->real_space_region.size[2];
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
-    int starcount=0;
-    double startotal=0.;
-    int jcount=0;
-    double jtotal=0.;
-    //malloc new grid for star grid reduction on one rank
-    //TODO:use bigfile_mpi to write star/XHI grids and/or slabs
-    /*float* star_buffer;
-    if(this_rank == 0)
-    {
-        star_buffer = mymalloc("star_buffer", sizeof(float) * grid_n_real);
-        for(int ii=0;ii<grid_n_real;ii++)
-        {
-            star_buffer[ii] = 0.0;
-        }
-    }
-    MPI_Reduce(UVBGgrids.stars, star_buffer, grid_n_real, MPI_FLOAT, MPI_SUM, 0, MPI_COMM_WORLD);
-    */
+    int xhi_neutral=0;
+    int xhi_ionised=0;
+    int j_gtz=0;
+
     //print some debug stats
-    if(this_rank == 0)
+    for(int ii=0;ii<grid_n;ii++)
     {
-        for(int ii=0;ii<grid_n_real;ii++)
-        {
-            //startotal += star_buffer[ii];
-            jtotal += UVBGgrids.J21[ii];
-            //if(star_buffer[ii] > 0)
-            //    starcount++;
-            if(UVBGgrids.J21[ii] > 0)
-                jcount++;
-        }
+        if(UVBGgrids.J21[ii] > FLOAT_REL_TOL)
+            j_gtz++;
+        if(UVBGgrids.xHI[ii] < FLOAT_REL_TOL)
+            xhi_neutral++;
+        if(UVBGgrids.xHI[ii] > (1 - FLOAT_REL_TOL))
+            xhi_ionised++;
     }
-    message(0,"star grid has %d nonzero cells, %e total\n",starcount,startotal);
-    message(0,"J21 grid has %d nonzero cells, %e total\n",jcount,jtotal);
+    MPI_Allreduce(MPI_IN_PLACE, &xhi_neutral, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &xhi_ionised, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &j_gtz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-    //TODO(jdavies): a better write function, probably using petaio stuff
-    //These grids should have been reduced onto all ranks
-    if(this_rank == 0)
-    {
+    message(0,"J21 grid has %d nonzero cells out of %d total cells \n",j_gtz,grid_n);
+    message(0,"XHI grid has %d fully neutral cells and %d fully ionised cells \n",xhi_neutral,xhi_ionised);
 
-        BigFile fout;
-        char fname[256];
-        sprintf(fname, "%s/UVgrids_%03d", All.OutputDir,SnapshotFileCount);
-        message(0, "saving uv grids to %s \n", fname);
-        big_file_create(&fout, fname);
+    //TODO(jdavies): finish this grid writing function
+    BigFile fout;
+    char fname[256];
+    sprintf(fname, "%s/UVgrids_%03d", All.OutputDir,SnapshotFileCount);
+    message(0, "saving uv grids to %s \n", fname);
 
-        //J21 block
-        BigBlock block;
-        big_file_create_block(&fout, &block, "J21", "=f4", 1, 1, (size_t[]){grid_n_real});
-        BigArray arr = {0};
-        big_array_init(&arr, UVBGgrids.J21, "=f4", 1, (size_t[]){grid_n_real}, NULL);
-        BigBlockPtr ptr = {0};
-        big_block_write(&block, &ptr, &arr);
-        big_block_close(&block);
+    if(0 != big_file_mpi_create(&fout, fname, MPI_COMM_WORLD)) {
+        endrun(0, "Failed to create snapshot at %s:%s\n", fname,
+                    big_file_get_error_message());
+    }
 
-        message(0,"saved J21\n");
+    big_file_mpi_create(&fout, fname, MPI_COMM_WORLD);
 
-        //xHI grid is in slabs
-        /*//xHI block
-        BigBlock block2;
-        big_file_create_block(&fout, &block2, "xHI", "=f4", 1, 1, (size_t[]){grid_n_real});
-        BigArray arr2 = {0};
-        big_array_init(&arr2, UVBGgrids.xHI, "=f4", 1, (size_t[]){grid_n_real}, NULL);
-        BigBlockPtr ptr2 = {0};
-        big_block_write(&block2, &ptr2, &arr2);
-        big_block_close(&block2);
+    BigBlock bh;
+    if(0 != big_file_mpi_create_block(&fout, &bh, "Header", NULL, 0, 0, 0, MPI_COMM_WORLD)) {
+        endrun(0, "Failed to create block at %s:%s\n", "Header",
+                big_file_get_error_message());
+    }
 
-        message(0,"saved XHI\n");*/
+    if(
+    (0 != big_block_set_attr(&bh, "volume_weighted_global_xHI", &(UVBGgrids.volume_weighted_global_xHI), "f8", 1)) ||
+    (0 != big_block_set_attr(&bh, "mass_weighted_global_xHI", &(UVBGgrids.mass_weighted_global_xHI), "f8", 1)) ||
+    (0 != big_block_set_attr(&bh, "scale_factor", &All.Time, "f8", 1)) ) {
+        endrun(0, "Failed to write attributes %s\n",
+                    big_file_get_error_message());
+    }
 
-        //stars block
-        /*BigBlock block3;
-        big_file_create_block(&fout, &block3, "stars", "=f4", 1, 1, (size_t[]){grid_n_real});
-        BigArray arr3 = {0};
-        big_array_init(&arr3, star_buffer, "=f4", 1, (size_t[]){grid_n_real}, NULL);
-        BigBlockPtr ptr3 = {0};
-        big_block_write(&block3, &ptr3, &arr3);
-        big_block_close(&block3);*/
+    if(0 != big_block_mpi_close(&bh, MPI_COMM_WORLD)) {
+        endrun(0, "Failed to close block %s\n",
+                    big_file_get_error_message());
+    }
 
-        big_file_close(&fout);
+    //TODO: think about the cartesian communicator in the PetaPM struct
+    //and the mapping between ranks, indices and positions
 
-        //myfree(star_buffer);
-        //message(0,"saved stars\n");
-   }
+    //J21 block
+    BigArray arr = {0};
+    big_array_init(&arr, UVBGgrids.J21, "=f4", 1, (size_t[]){grid_n}, NULL);
+    petaio_save_block(&fout,"J21",&arr,0);
+
+    message(0,"saved J21\n");
+
+    //xHI block
+    BigArray arr2 = {0};
+    big_array_init(&arr2, UVBGgrids.xHI, "=f4", 1, (size_t[]){grid_n}, NULL);
+    petaio_save_block(&fout,"XHI",&arr2,0);
+
+    message(0,"saved XHI\n");
+
+    if(0 != big_file_mpi_close(&fout, MPI_COMM_WORLD)){
+        endrun(0, "Failed to close snapshot at %s:%s\n", fname,
+                    big_file_get_error_message());
+    }
 }
 
 //Simple region initialization (taken from zeldovich.c)
@@ -443,7 +435,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
                     // r_bubble[i_real] = (float)R;
                 }
                 //TODO: implement CellSizeFactor
-                else if (last_step) {
+                else if (last_step && (xHI[pm_idx] > FLOAT_REL_TOL)) {
                     // Check if this is the last filtering step.
                     // If so, assign partial ionisations to those cells which aren't fully ionised
                      xHI[pm_idx] = (float)(1.0 - f_coll_stars * ReionEfficiency);
@@ -560,7 +552,6 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
     //TODO: a particle loop that detects new ionisations, saves J21_at_ion and z_at_ion
     //TODO: multiply J21_at_ion with halo bias??
 
-    myfree(UVBGgrids.xHI);
     //TODO(jdavies):remove this
     UVBGgrids.debug_printed = 0;
 

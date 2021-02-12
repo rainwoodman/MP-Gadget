@@ -479,11 +479,15 @@ run(int RestartSnapNum)
                 calculate_uvbg(&pm_mass,&pm_star,&pm_sfr);
                 message(0,"uvbg calculated\n");
 
-                //TODO: incorporate into write_checkpoint with petaio
-                //if(WriteSnapshot) {
-                    //save_uvbg_grids(SnapshotFileCount);
-                    //message(0,"uvbg saved\n");
-                //}
+                //since J21 is output to particles, we should only need to write these grids for debugging
+                //This function is currently WIP and only outputs some grid statistics
+#ifdef DEBUG
+                if(WriteSnapshot) {
+                    save_uvbg_grids(SnapshotFileCount,&pm_mass);
+                    message(0,"uvbg saved\n");
+                }
+#endif
+                myfree(UVBGgrids.xHI);
                 myfree(UVBGgrids.J21);
             }
         }
