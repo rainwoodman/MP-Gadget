@@ -17,7 +17,7 @@ struct particle_data
     /* particle type.  0=gas, 1=halo, 2=disk, 3=bulge, 4=stars, 5=bndry */
     /* TODO(jdavies): I moved this out of the bitfield because i need to access it by pointer in petapm.c
      * This could also be done by passing a struct pointer instead of void* as the petapm pstruct */
-    unsigned int Type;
+    int Type;
     struct {
         /* particle type.  0=gas, 1=halo, 2=disk, 3=bulge, 4=stars, 5=bndry */
         //unsigned int Type                 :4;

@@ -188,6 +188,10 @@ static void glass_force(PetaPM * pm, double t_f, struct ic_part_data * ICP, cons
         NULL,
         NULL,
         NumPart,
+        0, //no star info needed here
+        0, //no sfr info needed here
+        0, //no pi info needed here
+        NULL, //no SPHP needed here
     };
     curICP = ICP;
 
