@@ -4,7 +4,6 @@ FileBase = IC              # Base-filename of output files
 Ngrid = 128 # Size of cubic grid on which to create particles.
 
 BoxSize = 40000   # Periodic box size of simulation
-MaxMemSizePerNode = 16000
 
 Omega0 = 0.2814      # Total matter density  (at z=0)
 OmegaLambda = 0.7186      # Cosmological constant (at z=0)
@@ -14,9 +13,11 @@ HubbleParam = 0.697      # Hubble paramater (may be used for power spec paramete
 
 Redshift = 25        # Starting redshift
 
-Sigma8 = 0.810      # power spectrum normalization
+DifferentTransferFunctions = 1
+#Tabulated output in Mpc/h units.
+FileWithInputSpectrum = ../class_pk_99.dat  # filename of tabulated input spectrum (if used)
+FileWithTransferFunction = ../class_tk_99.dat  # filename of transfer functions for different species
 
-DifferentTransferFunctions = 0
 ScaleDepVelocity = 0
 
 WhichSpectrum = 2         # "1" selects Eisenstein & Hu spectrum,
