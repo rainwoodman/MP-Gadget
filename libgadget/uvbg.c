@@ -286,7 +286,7 @@ static void filter_pm(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value)
 }
 
 //print some statistics of the reion grids for debugging
-static void print_reion_debug_info(PetaPM * pm_mass, double * J21, double * xHI, double * mass_real, double * star_real, double * sfr_real)
+static void print_reion_debug_info(PetaPM * pm_mass, float * J21, float * xHI, double * mass_real, double * star_real, double * sfr_real)
 {
     double min_J21 = 1e30;
     double max_J21 = 0;
