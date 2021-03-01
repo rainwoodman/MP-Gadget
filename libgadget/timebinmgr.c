@@ -1,10 +1,12 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <gsl/gsl_integration.h>
 
 #include "timebinmgr.h"
 #include "utils.h"
-#include "uvbg.h"
+#include "cosmology.h"
+#include "physconst.h"
 
 /*! table with desired sync points. All forces and phase space variables are synchonized to the same order. */
 static SyncPoint * SyncPoints;
@@ -74,6 +76,41 @@ OutputListAction(ParameterSet * ps, char * name, void * data)
     return 0;
 }
 
+static double integrand_time_to_present(double a, void *param)
+{
+    Cosmology * CP = (Cosmology *) param;
+    double h = hubble_function(CP, a);
+    return 1 / a / h;
+}
+
+//time_to_present in Myr for excursion set syncpoints
+static double time_to_present(double a, Cosmology * CP)
+{
+#define WORKSIZE 1000
+    gsl_function F;
+    gsl_integration_workspace* workspace;
+    double time;
+    double result;
+    double abserr;
+
+    double hubble;
+    hubble = CP->Hubble / CP->UnitTime_in_s * SEC_PER_MEGAYEAR * CP->HubbleParam;
+
+    workspace = gsl_integration_workspace_alloc(WORKSIZE);
+    F.function = &integrand_time_to_present;
+
+    gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
+        1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
+
+    //convert to Myr and multiply by h
+    time = result / (hubble/CP->Hubble);
+
+    gsl_integration_workspace_free(workspace);
+
+    // return time to present as a function of redshift
+    return time;
+}
+
 /* For the tests*/
 void set_sync_params(int OutputListLength, double * OutputListTimes)
 {
@@ -96,7 +133,7 @@ void set_sync_params(int OutputListLength, double * OutputListTimes)
  * integer stamps.
  **/
 void
-setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStart, double ExcursionSetZStop, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF)
+setup_sync_points(Cosmology * CP, double TimeIC, double TimeMax, int ExcursionSetReionOn, double ExcursionSetZStart, double ExcursionSetZStop, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF)
 {
     int i;
 
@@ -120,7 +157,7 @@ setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStart, doub
     NSyncPoints = 1;
 
     // set up UVBG syncpoints at given intervals
-    {
+    if(ExcursionSetReionOn) {
         double a_end = 1/(1+ExcursionSetZStop) < TimeMax ? 1/(1+ExcursionSetZStop) : TimeMax;
         double uv_a = 1/(1+ExcursionSetZStart) > TimeIC ? 1/(1+ExcursionSetZStart) : TimeIC;
         while (uv_a <= a_end) {
@@ -135,11 +172,11 @@ setup_sync_points(double TimeIC, double TimeMax, double ExcursionSetZStart, doub
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             // TODO(jdavies): fix low-z where delta_a > 10Myr
             double delta_a = 0.0001;
-            double lbt = time_to_present(uv_a);
+            double lbt = time_to_present(uv_a,CP);
             double delta_lbt = 0.0;
             while ((delta_lbt <= UVBGTimestep) && (uv_a <= TimeMax)) {
                 uv_a += delta_a;
-                delta_lbt = lbt - time_to_present(uv_a);
+                delta_lbt = lbt - time_to_present(uv_a,CP);
                 //message(0,"trying UVBG syncpoint at a = %.3e, z = %.3e, delta_lbt = %.3e\n",uv_a,1/uv_a - 1,delta_lbt);
             }
         }

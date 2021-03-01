@@ -21,7 +21,6 @@ struct UVBGgrids_type {
 extern struct UVBGgrids_type UVBGgrids; 
 
 int grid_index(int i, int j, int k, ptrdiff_t strides[3]);
-double time_to_present(double a);
 void calculate_uvbg();
 void save_uvbg_grids(int SnapshotFileCount, PetaPM * pm);
 void set_uvbg_params(ParameterSet * ps);

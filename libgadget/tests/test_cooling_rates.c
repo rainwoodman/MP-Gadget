@@ -12,6 +12,9 @@
 #include <libgadget/cooling_rates.h>
 #include <libgadget/config.h>
 #include "stub.h"
+#include <libgadget/allvars.h>
+
+struct global_data_all_processes All;
 
 //Stub
 int
@@ -62,14 +65,14 @@ static void test_recomb_rates(void ** state)
     CP.HubbleParam = 0.7;
 
     set_coolpar(coolpar);
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
     for(i=0; i< NEXACT; i++) {
         assert_true(fabs(recomb_alphaHp(tt[i])/(f92g2[i]+f92n1[i])-1.) < 1e-2);
     }
 
     coolpar.recomb = Cen92;
     set_coolpar(coolpar);
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
     /*Cen rates are not very accurate.*/
     for(i=4; i< 12; i++) {
         assert_true(fabs(recomb_alphaHp(tt[i])/(f92g2[i]+f92n1[i])-1.) < 0.5);
@@ -88,7 +91,7 @@ static void test_uvbg_loader(void ** state)
     CP.OmegaCDM = 0.3;
     CP.OmegaBaryon = coolpar.fBar * CP.OmegaCDM;
     CP.HubbleParam = 0.7;
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
     /*Test sensible rates at high redshift*/
     struct UVBG uvbg = get_global_UVBG(16);
     assert_true(uvbg.epsH0 == 0);
@@ -128,7 +131,7 @@ static void test_rate_network(void ** state)
     CP.OmegaBaryon = coolpar.fBar * CP.OmegaCDM;
     CP.HubbleParam = 0.7;
 
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
 
     struct UVBG uvbg = get_global_UVBG(2);
 
@@ -163,7 +166,7 @@ static void test_rate_network(void ** state)
     //Check self-shielding is working.
     coolpar.SelfShieldingOn = 0;
     set_coolpar(coolpar);
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
 
     assert_true( get_neutral_fraction_phys_cgs(1, 100.*1e10,0.24, &uvbg, &ne) < 0.25);
     assert_true( get_neutral_fraction_phys_cgs(0.1, 100.*1e10,0.24, &uvbg, &ne) <0.05);
@@ -194,7 +197,7 @@ static void test_heatingcooling_rate(void ** state)
     CP.HubbleParam = HubbleParam;
 
     set_coolpar(coolpar);
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
 
     struct cooling_units coolunits;
     coolunits.CoolingOn = 1;
@@ -245,7 +248,7 @@ static void test_heatingcooling_rate(void ** state)
     /*Check self-shielding affects the cooling rates*/
     coolpar.SelfShieldingOn = 1;
     set_coolpar(coolpar);
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
     LambdaNet = get_heatingcooling_rate(dens*1.5, egyhot/10., 1 - HYDROGEN_MASSFRAC, 0, 0, &uvbg, &ne);
     //message(1, "LambdaNet = %g, uvbg=%g\n", LambdaNet, uvbg.epsHep);
     assert_false(LambdaNet > 0);
@@ -277,7 +280,7 @@ static void test_heatingcooling_rate_sherwood(void ** state)
     CP.HubbleParam = HubbleParam;
 
     set_coolpar(coolpar);
-    init_cooling_rates(TreeCool, MetalCool, &CP);
+    init_cooling_rates(TreeCool,NULL,MetalCool,&CP);
 
     /* temp at mean cosmological density */
     double rhocb = CP.OmegaBaryon * 3.0 * pow(CP.HubbleParam*HUBBLE,2.0) /(8.0*M_PI*GRAVITY)/PROTONMASS;

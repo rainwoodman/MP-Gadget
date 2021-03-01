@@ -343,7 +343,12 @@ static int setup_tree(void **state) {
     set_domain_par(dp);
     petapm_module_init(omp_get_max_threads());
     init_forcetree_params(2);
-    init_cosmology(&All.CP, 0.01);
+    /*Default value for L=kpc v=km/s*/
+    double UnitTime_in_s = 3.08568e+16;
+    double UnitLength_in_cm = 3.085678e+21;
+    double UnitMass_in_g = 1.989e+43;
+    /*Do the main cosmology initialisation*/
+    init_cosmology(&All.CP,0.01,UnitLength_in_cm,UnitMass_in_g,UnitTime_in_s);
     /*Set up the top-level domain grid*/
     struct forcetree_testdata *data = malloc(sizeof(struct forcetree_testdata));
     data->r = gsl_rng_alloc(gsl_rng_mt19937);

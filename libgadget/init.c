@@ -159,17 +159,17 @@ inttime_t init(int RestartSnapNum, DomainDecomp * ddecomp)
     /*Add TimeInit and TimeMax to the output list*/
     if (RestartSnapNum < 0) {
         /* allow a first snapshot at IC time; */
-        setup_sync_points(All.TimeIC, All.TimeMax, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, 0.0, All.SnapshotWithFOF);
+        setup_sync_points(&All.CP,All.TimeIC, All.TimeMax, All.ExcursionSetReionOn, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, 0.0, All.SnapshotWithFOF);
     } else {
         /* skip dumping the exactly same snapshot */
-        setup_sync_points(All.TimeIC, All.TimeMax, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, All.TimeInit, All.SnapshotWithFOF);
+        setup_sync_points(&All.CP,All.TimeIC, All.TimeMax, All.ExcursionSetReionOn, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, All.TimeInit, All.SnapshotWithFOF);
         /* If TimeInit is not in a sensible place on the integer timeline
          * (can happen if the outputs changed since it was written)
          * start the integer timeline anew from TimeInit */
         inttime_t ti_init = ti_from_loga(log(All.TimeInit)) % TIMEBASE;
         if(round_down_power_of_two(ti_init) != ti_init) {
             message(0,"Resetting integer timeline (as %x != %x) to current snapshot\n",ti_init, round_down_power_of_two(ti_init));
-            setup_sync_points(All.TimeInit, All.TimeMax, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, All.TimeInit, All.SnapshotWithFOF);
+            setup_sync_points(&All.CP,All.TimeInit, All.TimeMax, All.ExcursionSetReionOn, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, All.TimeInit, All.SnapshotWithFOF);
         }
     }
 

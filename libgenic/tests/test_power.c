@@ -153,7 +153,12 @@ static int setup(void ** state)
     st.CP.MNu[1] = 0;
     st.CP.MNu[2] = 0;
     st.CP.Hubble =  3.2407789e-18 * 3.08568e+16;
-    init_cosmology(&st.CP, 0.01);
+    /*Default value for L=kpc v=km/s*/
+    double UnitTime_in_s = 3.08568e+16;
+    double UnitLength_in_cm = 3.085678e+21;
+    double UnitMass_in_g = 1.989e+43;
+    /*Do the main cosmology initialisation*/
+    init_cosmology(&st.CP,0.01,UnitLength_in_cm,UnitMass_in_g,UnitTime_in_s);
     *state = &st;
     return 0;
 }

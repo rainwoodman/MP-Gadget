@@ -17,7 +17,6 @@
 #include <bigfile-mpi.h>
 #include <complex.h>
 #include <stdbool.h>
-#include <gsl/gsl_integration.h>
 #include <assert.h>
 
 #include "uvbg.h"
@@ -71,40 +70,6 @@ void set_uvbg_params(ParameterSet * ps) {
     }
     MPI_Bcast(&uvbg_params, sizeof(struct UVBGParams), MPI_BYTE, 0, MPI_COMM_WORLD);
 
-}
-
-double integrand_time_to_present(double a, void *dummy)
-{
-    return 1 / a / hubble_function(&All.CP,a);
-}
-
-//time_to_present in Myr
-double time_to_present(double a)
-{
-#define WORKSIZE 1000
-    gsl_function F;
-    gsl_integration_workspace* workspace;
-    double time;
-    double result;
-    double abserr;
-
-    double hubble;
-    hubble = All.CP.Hubble / All.UnitTime_in_Megayears * All.CP.HubbleParam;
-    //jdavies(second to Myr conversion)
-
-    workspace = gsl_integration_workspace_alloc(WORKSIZE);
-    F.function = &integrand_time_to_present;
-
-    gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
-        1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
-
-    //convert to Myr and multiply by h
-    time = result / (hubble/All.CP.Hubble);
-
-    gsl_integration_workspace_free(workspace);
-
-    // return time to present as a function of redshift
-    return time;
 }
 
 int grid_index(int i, int j, int k, ptrdiff_t strides[3])

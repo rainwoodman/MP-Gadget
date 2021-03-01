@@ -11,6 +11,8 @@ OmegaBaryon = 0.0464     # Baryon density        (at z=0)
 ProduceGas = 1         # 1 = Produce gas  0 = no gas, just DM.
 HubbleParam = 0.697      # Hubble paramater (may be used for power spec parameterization)
 
+Sigma8 = 0.810      # power spectrum normalization
+
 Redshift = 25        # Starting redshift
 
 DifferentTransferFunctions = 1
@@ -18,20 +20,9 @@ DifferentTransferFunctions = 1
 FileWithInputSpectrum = ../class_pk_99.dat  # filename of tabulated input spectrum (if used)
 FileWithTransferFunction = ../class_tk_99.dat  # filename of transfer functions for different species
 
-ScaleDepVelocity = 0
-
 WhichSpectrum = 2         # "1" selects Eisenstein & Hu spectrum,
                            # "2" selects a tabulated power spectrum in
                            # the file 'FileWithInputSpectrum'
                            # otherwise, Efstathiou parametrization is used
 
-# filename of tabulated input in Mpc/h
-FileWithInputSpectrum = ../../powerspectrum-wmap9.txt
-
-PrimordialIndex = 0.971      # may be used to tilt the primordial index
-
 Seed = 181170    #  seed for IC-generator
-
-UnitLength_in_cm = 3.085678e21   # defines length unit of output (in cm/h) 
-UnitMass_in_g = 1.989e43      # defines mass unit of output (in g/cm)
-UnitVelocity_in_cm_per_s = 1e5           # defines velocity unit of output (in cm/sec)
