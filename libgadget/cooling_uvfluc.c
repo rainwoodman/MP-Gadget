@@ -200,8 +200,10 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double J21) {
 
     uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
 
-#ifdef DEBUG
+#if 0
     //(jdavies) debugging messages, print's first particle's UVBG
+    //disabled for now to make the tests run through as it contains UVBGgrids
+    //uvbg.c contains a lot of other modules I'd have to include in the test compile
     if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
     {
         message(0,"-----main UVBG for one particle-----\n");
