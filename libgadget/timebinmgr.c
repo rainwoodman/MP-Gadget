@@ -162,7 +162,6 @@ setup_sync_points(Cosmology * CP, double TimeIC, double TimeMax, int ExcursionSe
     if(ExcursionSetReionOn) {
         double a_end = 1/(1+ExcursionSetZStop) < TimeMax ? 1/(1+ExcursionSetZStop) : TimeMax;
         double uv_a = 1/(1+ExcursionSetZStart) > TimeIC ? 1/(1+ExcursionSetZStart) : TimeIC;
-        message(0,"a_start = %f, a_end = %f\n",uv_a,a_end);
         while (uv_a <= a_end) {
             SyncPoints[NSyncPoints].a = uv_a;
             SyncPoints[NSyncPoints].loga = log(uv_a);
@@ -170,7 +169,7 @@ setup_sync_points(Cosmology * CP, double TimeIC, double TimeMax, int ExcursionSe
             SyncPoints[NSyncPoints].write_fof = 0;
             SyncPoints[NSyncPoints].calc_uvbg = 1;
             NSyncPoints++;
-            message(0,"added UVBG syncpoint at a = %.3f z = %.3f, Nsync = %d\n",uv_a,1/uv_a - 1,NSyncPoints);
+            //message(0,"added UVBG syncpoint at a = %.3f z = %.3f, Nsync = %d\n",uv_a,1/uv_a - 1,NSyncPoints);
 
             // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
             // TODO(jdavies): fix low-z where delta_a > 10Myr
