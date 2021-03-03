@@ -517,9 +517,6 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
     //TODO: a particle loop that detects new ionisations, saves J21_at_ion and z_at_ion
     //TODO: multiply J21_at_ion with halo bias??
 
-    //TODO(jdavies):remove this
-    UVBGgrids.debug_printed = 0;
-
     walltime_measure("/UVBG/find_HII_bubbles");
    
     walltime_measure("/UVBG");

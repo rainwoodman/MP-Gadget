@@ -13,7 +13,6 @@
 #include "utils/mymalloc.h"
 #include "utils/interp.h"
 #include "utils/endrun.h"
-#include "uvbg.h"
 #include "allvars.h"
 
 static struct {
@@ -200,6 +199,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double J21) {
 
     uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
 
+    //TODO: make debug_printed a variable in this file that gets reset each timestep
 #if 0
     //(jdavies) debugging messages, print's first particle's UVBG
     //disabled for now to make the tests run through as it contains UVBGgrids
@@ -233,7 +233,6 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double J21) {
 
 //switch function that decides whether to use excursion set or global UV background
 /*TODO: there are a few continuity issues to consider fixing.
- * switching to the global rates for heii ionised particles is discontinuous.
  * if the z_reion tables provided finish after ExcursionSetZStop, particles could rapidly recombine.
  * I'm not sure how initial heating from reionisation (see D'Aloisio et al. 2019) is handled here */
 struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, double J21)

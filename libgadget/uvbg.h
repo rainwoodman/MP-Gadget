@@ -12,10 +12,6 @@ struct UVBGgrids_type {
 
     double volume_weighted_global_xHI;
     double mass_weighted_global_xHI;
-
-    //TODO(jdavies): remove this
-    //this is a check for debug messages so i can print UVBG for a single particle
-    int debug_printed;
 };
 
 extern struct UVBGgrids_type UVBGgrids; 

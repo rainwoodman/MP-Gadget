@@ -480,8 +480,9 @@ run(int RestartSnapNum)
                 message(0,"uvbg calculated\n");
 
                 //since J21 is output to particles, we should only need to write these grids for debugging
-                //This function is currently WIP and only outputs some grid statistics
+                //This function is currently WIP
                 //TODO: test the new grid-saving before including it in debug
+                //also pass in WriteSnapshot and SnapshotFileCount so I don't have to make UVBGgrids global
 #if 0
                 if(WriteSnapshot) {
                     save_uvbg_grids(SnapshotFileCount,&pm_mass);
