@@ -1,6 +1,10 @@
 """
 	James' hacked up grid maker
 	created from parts of the reionisation model
+
+    Example usage: python get_xgrids.py  output/PART_005 grids/example_grid_z10 --pos=0/Position --weight=0/Mass
+
+    For a 1Mpc resolution grid of gas particle overdensity at the sixth snapshot and save it to grids/example_grid_z10
 """
 
 import argparse
@@ -11,15 +15,13 @@ from mpi4py import MPI
 import numpy
 
 ap = argparse.ArgumentParser("get_xgrids.py")
-ap.add_argument("fastpm", help='Non-linear particle data from FastPM')
-ap.add_argument("output", help='name of bigfile to store the mesh')
-ap.add_argument("--pos", help='name of the position dataset in the bigfile')
-ap.add_argument("--weight", help='name of the weighting dataset in the bigfile')
-ap.add_argument("--dataset", default='overdensity_grid', help='name of the dataset that stores the reionization redshift')
+ap.add_argument("fastpm", help='Particle data')
+ap.add_argument("output", help='Name of bigfile to store the mesh')
+ap.add_argument("--pos", help='Name of the position dataset in the bigfile')
+ap.add_argument("--weight", help='Name of the weighting dataset in the bigfile')
+ap.add_argument("--dataset", default='grid', help='name of the dataset to write to')
 ap.add_argument("--resolution", type=float, default=1.0, help='resolution in Mpc/h')
 ap.add_argument("--chunksize", type=int, default=1024*1024*32, help='number of particle to read at once')
-ap.add_argument("--boxsize",type=float,default=400.,help='box size in Mpc/h')
-ap.add_argument("--redshift",type=float,default=10.,help='redshift of dgrid')
 logger = logging
 logging.basicConfig(level=logging.INFO)
 
@@ -28,8 +30,8 @@ def main():
     comm = MPI.COMM_WORLD
 
     ff = bigfile.BigFileMPI(comm, ns.fastpm)
-    BoxSize = ns.boxsize
-    Redshift = ns.redshift
+    BoxSize = ff['Header'].attrs['BoxSize'] / 1000
+    Redshift = 1/ff['Header'].attrs['Time'] - 1
 
     Nmesh = int(BoxSize / ns.resolution)
     # round it to 8.

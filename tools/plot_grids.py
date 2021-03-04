@@ -76,7 +76,7 @@ fin.close()
 ext = [0, length, 0, length]
 gs = gs.GridSpec(n_types, n_snap)
 
-fig = plt.figure(figsize=(8, 6))
+fig = plt.figure(figsize=(8, 6*n_types/n_snap))
 
 #put each slice in the correct place based on redshift / type
 for i, slab in enumerate(slab_list):
@@ -89,7 +89,9 @@ for i, slab in enumerate(slab_list):
     ax.set_title(grid_names[i])
 
 fig.tight_layout()
-fig.savefig(ns.output)
+
+if ns.output is not None:
+    fig.savefig(ns.output)
 
 if ns.show_plot:
     plt.show()
