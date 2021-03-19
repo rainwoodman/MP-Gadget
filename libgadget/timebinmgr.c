@@ -155,8 +155,7 @@ setup_sync_points(Cosmology * CP, double TimeIC, double TimeMax, int ExcursionSe
     SyncPoints[0].loga = log(TimeIC);
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
     SyncPoints[0].write_fof = 0;
-    /* if we are restarting during reionisation, we don't want a zero initial background*/
-    SyncPoints[0].calc_uvbg = TimeIC > 1/(1+ExcursionSetZStart) ? 1 : 0;
+    SyncPoints[0].calc_uvbg = 0;
     NSyncPoints = 1;
 
     // set up UVBG syncpoints at given intervals

@@ -890,7 +890,7 @@ SIMPLE_PROPERTY_PI(BlackholeMseed, Mseed, float, 1, struct bh_particle_data)
 SIMPLE_SETTER_PI(STBlackholeMinPotPos , MinPotPos[0], double, 3, struct bh_particle_data)
 
 /* extra properties from excursion set addition */
-SIMPLE_GETTER_PI(GTJ21, local_J21, float, 1, struct sph_particle_data)
+SIMPLE_PROPERTY_PI(J21, local_J21, float, 1, struct sph_particle_data)
     
 static void GTBlackholeMinPotPos(int i, double * out, void * baseptr, void * smanptr) {
     /* Remove the particle offset before saving*/
@@ -1082,7 +1082,9 @@ void register_io_blocks(struct IOTable * IOTable, int WriteGroupID) {
     IO_REG_NONFATAL(BlackholeSwallowTime, "f4", 1, 5, IOTable);
 
     /* excursion set */
-    IO_REG_WRONLY(J21,"f4",1,0,IOTable);
+    if(All.ExcursionSetReionOn){
+        IO_REG_NONFATAL(J21,"f4",1,0,IOTable);
+    }
     /* end excursion set*/
 
     /*Sort IO blocks so similar types are together; then ordered by the sequence they are declared. */
