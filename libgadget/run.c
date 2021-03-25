@@ -413,7 +413,7 @@ run(int RestartSnapNum)
                 }
                 //excursion set reionisation
                 if(CalcUVBG && All.ExcursionSetReionOn) {
-                    calculate_uvbg(&pm_mass,&pm_star,&pm_sfr,WriteSnapshot,SnapshotFileCount);
+                    calculate_uvbg(&pm_mass, &pm_star, &pm_sfr, &fof, WriteSnapshot, SnapshotFileCount);
                     message(0,"uvbg calculated\n");
                 }
                 fof_finish(&fof);

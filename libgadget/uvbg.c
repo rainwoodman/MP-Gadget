@@ -29,6 +29,7 @@
 #include "physconst.h"
 #include "walltime.h"
 #include "petaio.h"
+#include "fof.h"
 
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
@@ -459,7 +460,7 @@ static void readout_J21(PetaPM * pm, int i, double * mesh, double weight) {
 }
 
 //TODO:split up into more functions
-void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, int WriteSnapshot, int SnapshotFileCount){
+void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGroups * fof, int WriteSnapshot, int SnapshotFileCount){
     //setup filter radius range
     double Rmax = uvbg_params.ReionRBubbleMax;
     double Rmin = uvbg_params.ReionRBubbleMin;
@@ -476,12 +477,18 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, int Wri
         /* By default all particles are active. For hybrid neutrinos set below.*/
         NULL,
         PartManager->NumPart,
-        (char*) &P[0].Type  - (char*) P,
-        (char*) &SphP[0].Sfr  - (char*) SphP, //TODO: make sure you are using the right object here
-        (char*) &P[0].PI  - (char*) P,
-        SphP,
     };
-
+    PetaPMReionPartStruct = {
+        (char*) &P[0].Type  - (char*) P,
+        (char*) &P[0].PI  - (char*) P,
+        (char*) &P[0].GrNr  - (char*) P,
+        SphP,
+        sizeof(SphP[0]),
+        (char*) &SphP[0].Sfr  - (char*) SphP, //TODO: make sure you are using the right object here
+        fof->Group,
+        sizeof(fof->Group[0]),
+        (char*) &fof->Group[0].Mass - (char*) &fof->Group,
+    };
     PetaPMGlobalFunctions global_functions = {NULL, NULL, divide_by_ncell};
     
     //TODO: set this up with all the filtering/reion loops
@@ -499,7 +506,9 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, int Wri
     }
     
     /* initialize J21 for grid and particles */
-    int grid_n = pm_mass->real_space_region.size[0] * pm_mass->real_space_region.size[1] * pm_mass->real_space_region.size[2];
+    int grid_n = pm_mass->real_space_region.size[0] 
+        * pm_mass->real_space_region.size[1] 
+        * * pm_mass->real_space_region.size[2];
 
     UVBGgrids.J21 = mymalloc("J21", sizeof(float) * grid_n);
     float * J21 = UVBGgrids.J21;
@@ -512,7 +521,8 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, int Wri
     }
 
     message(0, "Away to call find_HII_bubbles...\n");
-    petapm_reion(pm_mass,pm_star,pm_sfr,makeregion,&global_functions,functions,&pstruct,reion_loop_pm,Rmax,Rmin,Rdelta,NULL);
+    petapm_reion(pm_mass,pm_star,pm_sfr,makeregion,&global_functions
+            ,functions,&pstruct,&rstruct,reion_loop_pm,Rmax,Rmin,Rdelta,NULL);
 
     //TODO: a particle loop that detects new ionisations, saves J21_at_ion and z_at_ion
     //TODO: multiply J21_at_ion with halo bias??

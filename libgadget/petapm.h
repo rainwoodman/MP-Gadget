@@ -84,12 +84,20 @@ typedef struct {
     int * RegionInd;
     int (*active) (int i);
     int NumPart;
-    /* added for reion */
-    size_t offset_type;
-    size_t offset_sfr;
-    size_t offset_pi;
-    void * Sphslot;
 } PetaPMParticleStruct;
+
+/* extra particle info used in reionisation*/
+typedef struct {
+    size_t offset_type; //offset in particle data to type
+    size_t offset_pi; //offset in particle data to property index
+    size_t offset_grnr; //offset in particle data to fof group number
+    void * Sphslot; //pointer to SPH slot
+    size_t sph_elsize //element size of SPH slot
+    size_t offset_sfr; //offset in SPH slot to star formation rate
+    void* fof; //pointer to fof groups
+    size_t fof_elsize; //element size of fof group
+    size_t offset_fofmass; //offset in fof groups to fof mass
+} PetaPMReionPartStruct;
 
 typedef void (*petapm_transfer_func)(PetaPM * pm, int64_t k2, int kpos[3], pfft_complex * value);
 typedef void (*petapm_readout_func)(PetaPM * pm, int i, double * mesh, double weight);
@@ -155,6 +163,7 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         PetaPMGlobalFunctions * global_functions, //petapm_transfer_func global_transfer,
         PetaPMFunctions * functions,
         PetaPMParticleStruct * pstruct,
+        PetaPMReionPartStruct * rstruct,
         petapm_reion_func reion_loop,
         double R_max, double R_min, double R_delta,
         void * userdata);
