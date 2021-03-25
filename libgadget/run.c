@@ -344,6 +344,19 @@ run(int RestartSnapNum)
         apply_half_kick(&Act, &All.CP, &times);
 
         int didfof = 0;
+
+        /* get syncpoint variables for Excursion set (here) and snapshot saving (later) */
+
+        int WriteSnapshot = 0;
+        int WriteFOF = 0;
+        int CalcUVBG = 0;
+
+        if(planned_sync) {
+            WriteSnapshot |= planned_sync->write_snapshot;
+            WriteFOF |= planned_sync->write_fof;
+            CalcUVBG |= planned_sync->calc_uvbg;
+        }
+
         /* Cooling and extra physics show up as a source term in the evolution equations.
          * Formally you can write the structure of the partial differential equations:
            dU/dt +  div(F) = S
@@ -382,8 +395,11 @@ run(int RestartSnapNum)
              * Also a good idea to only run it on a PM step.
              * This does not break the tree because the new black holes do not move or change mass, just type.
              * It does not matter that the velocities are half a step off because they are not used in the FoF code.*/
+            /* (jdavies): I have moved the excursion set here because we need to FOF group numbers for the
+             *  escape fraction scaling, and all syncpoints should be PM steps */
             if (is_PM && ((All.BlackHoleOn && All.Time >= TimeNextSeedingCheck) ||
-                (during_helium_reionization(1/All.Time - 1) && need_change_helium_ionization_fraction(All.Time)))) {
+                (during_helium_reionization(1/All.Time - 1) && need_change_helium_ionization_fraction(All.Time)) ||
+                 (CalcUVBG && All.ExcursionSetReionOn))) {
 
                 /* Seeding */
                 FOFGroups fof = fof_fof(&Tree, MPI_COMM_WORLD);
@@ -394,6 +410,11 @@ run(int RestartSnapNum)
                 if(during_helium_reionization(1/All.Time - 1)) {
                     /* Helium reionization by switching on quasar bubbles*/
                     do_heiii_reionization(1/All.Time - 1, &fof, &Tree);
+                }
+                //excursion set reionisation
+                if(CalcUVBG && All.ExcursionSetReionOn) {
+                    calculate_uvbg(&pm_mass,&pm_star,&pm_sfr,WriteSnapshot,SnapshotFileCount);
+                    message(0,"uvbg calculated\n");
                 }
                 fof_finish(&fof);
                 didfof = 1;
@@ -419,16 +440,6 @@ run(int RestartSnapNum)
          * We only attempt to output on sync points. This is the only chance where all variables are
          * synchronized in a consistent state in a K(KDDK)^mK scheme.
          */
-
-        int WriteSnapshot = 0;
-        int WriteFOF = 0;
-        int CalcUVBG = 0;
-
-        if(planned_sync) {
-            WriteSnapshot |= planned_sync->write_snapshot;
-            WriteFOF |= planned_sync->write_fof;
-            CalcUVBG |= planned_sync->calc_uvbg;
-        }
 
         if(is_PM) { /* the if here is unnecessary but to signify checkpointing occurs only at PM steps. */
             WriteSnapshot |= action->write_snapshot;
@@ -476,21 +487,6 @@ run(int RestartSnapNum)
         
         if(All.ExcursionSetReionOn){
             if(CalcUVBG) {
-                calculate_uvbg(&pm_mass,&pm_star,&pm_sfr);
-                message(0,"uvbg calculated\n");
-
-                //since J21 is output to particles, we should only need to write these grids for debugging
-                //This function is currently WIP
-                //TODO: test the new grid-saving before including it in debug
-                //also pass in WriteSnapshot and SnapshotFileCount so I don't have to make UVBGgrids global
-#if 0
-                if(WriteSnapshot) {
-                    save_uvbg_grids(SnapshotFileCount,&pm_mass);
-                    message(0,"uvbg saved\n");
-                }
-#endif
-                myfree(UVBGgrids.xHI);
-                myfree(UVBGgrids.J21);
             }
         }
 

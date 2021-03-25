@@ -459,7 +459,7 @@ static void readout_J21(PetaPM * pm, int i, double * mesh, double weight) {
 }
 
 //TODO:split up into more functions
-void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
+void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, int WriteSnapshot, int SnapshotFileCount){
     //setup filter radius range
     double Rmax = uvbg_params.ReionRBubbleMax;
     double Rmin = uvbg_params.ReionRBubbleMin;
@@ -518,6 +518,19 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr){
     //TODO: multiply J21_at_ion with halo bias??
 
     walltime_measure("/UVBG/find_HII_bubbles");
+
+    //since J21 is output to particles, we should only need to write these grids for debugging
+    //This function is currently WIP
+    //TODO: test the new grid-saving before including it in debug
+#if 0
+    if(WriteSnapshot) {
+        save_uvbg_grids(SnapshotFileCount,&pm_mass);
+        message(0,"uvbg saved\n");
+    }
+    walltime_measure("/UVBG/save");
+#endif
+    myfree(UVBGgrids.xHI);
+    myfree(UVBGgrids.J21);
    
     walltime_measure("/UVBG");
 }
