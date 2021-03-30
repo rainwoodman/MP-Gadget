@@ -40,10 +40,12 @@ void setup_cosmology(Cosmology * CP, double Omega0, double OmegaBaryon, double H
     CP->MNu[0] = CP->MNu[1] = CP->MNu[2] = 0;
     /*Default value for L=kpc v=km/s*/
     double UnitTime_in_s = 3.08568e+16;
+    double UnitLength_in_cm = 3.085678e+21;
+    double UnitMass_in_g = 1.989e+43;
     /*Should be 0.1*/
     CP->Hubble = HUBBLE * UnitTime_in_s;
     /*Do the main cosmology initialisation*/
-    init_cosmology(CP,0.01);
+    init_cosmology(CP,0.01,UnitLength_in_cm,UnitMass_in_g,UnitTime_in_s);
 }
 
 static inline double radgrow(double aa, double omegar) {

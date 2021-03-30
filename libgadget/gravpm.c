@@ -68,6 +68,10 @@ gravpm_force(PetaPM * pm, ForceTree * tree) {
         /* By default all particles are active. For hybrid neutrinos set below.*/
         NULL,
         PartManager->NumPart,
+        0, //no star info needed here
+        0, //no sfr info needed here
+        0, //no pi info needed here
+        NULL, //no SPHP needed here
     };
 
     if(All.HybridNeutrinosOn && particle_nu_fraction(&All.CP.ONu.hybnu, All.Time, 0) == 0.)

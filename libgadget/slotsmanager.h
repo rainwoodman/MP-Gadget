@@ -103,6 +103,7 @@ struct sph_particle_data
                             /*!< VS08: remaining waiting for wind particle to be eligible to form winds again */
     MyFloat Sfr; /* Star formation rate in Msun/year. Stored here because, if the H2 dependent star formation is used,
                     it depends on the scratch variable GradRho and thus cannot be recomputed after a fof-exchange. */
+    MyFloat local_J21; /* local J21 ionising background calculated from the excursion set */
     MyFloat Metallicity;        /*!< metallicity of gas particle */
     float Metals[NMETALS];
 };

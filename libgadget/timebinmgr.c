@@ -1,9 +1,12 @@
 #include <math.h>
 #include <string.h>
 #include <stdlib.h>
+#include <gsl/gsl_integration.h>
 
 #include "timebinmgr.h"
 #include "utils.h"
+#include "cosmology.h"
+#include "physconst.h"
 
 /*! table with desired sync points. All forces and phase space variables are synchonized to the same order. */
 static SyncPoint * SyncPoints;
@@ -73,6 +76,43 @@ OutputListAction(ParameterSet * ps, char * name, void * data)
     return 0;
 }
 
+static double integrand_time_to_present(double a, void *param)
+{
+    Cosmology * CP = (Cosmology *) param;
+    double h = hubble_function(CP, a);
+    return 1 / a / h;
+}
+
+//time_to_present in Myr for excursion set syncpoints
+static double time_to_present(double a, Cosmology * CP)
+{
+#define WORKSIZE 1000
+#define SEC_PER_MEGAYEAR 3.155e13 
+    gsl_function F;
+    gsl_integration_workspace* workspace;
+    double time;
+    double result;
+    double abserr;
+
+    double hubble;
+    hubble = CP->Hubble / CP->UnitTime_in_s * SEC_PER_MEGAYEAR * CP->HubbleParam;
+
+    workspace = gsl_integration_workspace_alloc(WORKSIZE);
+    F.function = &integrand_time_to_present;
+    F.params = CP;
+
+    gsl_integration_qag(&F, a, 1.0, 1.0 / hubble,
+        1.0e-8, WORKSIZE, GSL_INTEG_GAUSS21, workspace, &result, &abserr);
+
+    //convert to Myr and multiply by h
+    time = result / (hubble/CP->Hubble);
+
+    gsl_integration_workspace_free(workspace);
+
+    // return time to present as a function of redshift
+    return time;
+}
+
 /* For the tests*/
 void set_sync_params(int OutputListLength, double * OutputListTimes)
 {
@@ -95,7 +135,7 @@ void set_sync_params(int OutputListLength, double * OutputListTimes)
  * integer stamps.
  **/
 void
-setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, int SnapshotWithFOF)
+setup_sync_points(Cosmology * CP, double TimeIC, double TimeMax, int ExcursionSetReionOn, double ExcursionSetZStart, double ExcursionSetZStop, double UVBGTimestep, double no_snapshot_until_time, int SnapshotWithFOF)
 {
     int i;
 
@@ -103,19 +143,53 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
 
     if(NSyncPoints > 0)
         myfree(SyncPoints);
-    SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2));
+    //TODO(Jdavies): figure out how many are there beforehand so we can malloc a list of the right size
+    //z=20 to z=4 is ~150 syncpoints at 10 Myr spaces
+    //
+    SyncPoints = mymalloc("SyncPoints", sizeof(SyncPoint) * (Sync.OutputListLength+2+400)); 
 
     /* Set up first and last entry to SyncPoints; TODO we can insert many more! */
-
+    //NOTE(jdavies): these first syncpoints need to be in order
+   
     SyncPoints[0].a = TimeIC;
     SyncPoints[0].loga = log(TimeIC);
     SyncPoints[0].write_snapshot = 0; /* by default no output here. */
     SyncPoints[0].write_fof = 0;
-    SyncPoints[1].a = TimeMax;
-    SyncPoints[1].loga = log(TimeMax);
-    SyncPoints[1].write_snapshot = 1;
-    SyncPoints[1].write_fof = 0;
-    NSyncPoints = 2;
+    SyncPoints[0].calc_uvbg = 0;
+    NSyncPoints = 1;
+
+    // set up UVBG syncpoints at given intervals
+    if(ExcursionSetReionOn) {
+        double a_end = 1/(1+ExcursionSetZStop) < TimeMax ? 1/(1+ExcursionSetZStop) : TimeMax;
+        double uv_a = 1/(1+ExcursionSetZStart) > TimeIC ? 1/(1+ExcursionSetZStart) : TimeIC;
+        while (uv_a <= a_end) {
+            SyncPoints[NSyncPoints].a = uv_a;
+            SyncPoints[NSyncPoints].loga = log(uv_a);
+            SyncPoints[NSyncPoints].write_snapshot = 0;
+            SyncPoints[NSyncPoints].write_fof = 0;
+            SyncPoints[NSyncPoints].calc_uvbg = 1;
+            NSyncPoints++;
+            //message(0,"added UVBG syncpoint at a = %.3f z = %.3f, Nsync = %d\n",uv_a,1/uv_a - 1,NSyncPoints);
+
+            // TODO(smutch): OK - this is ridiculous (sorry!), but I just wanted to quickly hack something...
+            // TODO(jdavies): fix low-z where delta_a > 10Myr
+            double delta_a = 0.0001;
+            double lbt = time_to_present(uv_a,CP);
+            double delta_lbt = 0.0;
+            while ((delta_lbt <= UVBGTimestep) && (uv_a <= TimeMax)) {
+                uv_a += delta_a;
+                delta_lbt = lbt - time_to_present(uv_a,CP);
+                //message(0,"trying UVBG syncpoint at a = %.3e, z = %.3e, delta_lbt = %.3e\n",uv_a,1/uv_a - 1,delta_lbt);
+            }
+        }
+    }
+    
+    SyncPoints[NSyncPoints].a = TimeMax;
+    SyncPoints[NSyncPoints].loga = log(TimeMax);
+    SyncPoints[NSyncPoints].write_snapshot = 1;
+    SyncPoints[NSyncPoints].calc_uvbg = 1;
+    SyncPoints[NSyncPoints].write_fof = 0;
+    NSyncPoints++;
 
     /* we do an insertion sort here. A heap is faster but who cares the speed for this? */
     for(i = 0; i < Sync.OutputListLength; i ++) {
@@ -142,9 +216,11 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
             SyncPoints[j].a = a;
             SyncPoints[j].loga = loga;
             NSyncPoints ++;
+            //message(0,"added outlist syncpoint at a = %.3f, j = %d, Ns = %d\n",a,j,NSyncPoints);
         }
         if(SyncPoints[j].a > no_snapshot_until_time) {
             SyncPoints[j].write_snapshot = 1;
+            SyncPoints[j].calc_uvbg = 1;
             if(SnapshotWithFOF) {
                 SyncPoints[j].write_fof = 1;
             }
@@ -153,6 +229,7 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         } else {
             SyncPoints[j].write_snapshot = 0;
             SyncPoints[j].write_fof = 0;
+            SyncPoints[j].calc_uvbg = 0;
         }
     }
 
@@ -160,9 +237,10 @@ setup_sync_points(double TimeIC, double TimeMax, double no_snapshot_until_time, 
         SyncPoints[i].ti = (i * 1L) << (TIMEBINS);
     }
 
-/*     for(i = 0; i < NSyncPoints; i++) { */
-/*         message(1,"Out: %g %ld\n", exp(SyncPoints[i].loga), SyncPoints[i].ti); */
-/*     } */
+    //message(1,"NSyncPoints = %d, OutputListLength = %d , timemax = %.3f\n",NSyncPoints,Sync.OutputListLength,TimeMax);
+    /*for(i = 0; i < NSyncPoints; i++) {
+        message(1,"Out: %g %ld\n", exp(SyncPoints[i].loga), SyncPoints[i].ti);
+    }*/
 }
 
 /*! this function returns the next output time that is in the future of

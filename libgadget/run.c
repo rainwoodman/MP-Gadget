@@ -31,6 +31,7 @@
 #include "fof.h"
 #include "cooling_qso_lightup.h"
 #include "lightcone.h"
+#include "uvbg.h"
 #include "timefac.h"
 
 /* stats.c only used here */
@@ -143,6 +144,19 @@ run(int RestartSnapNum)
     int SnapshotFileCount = RestartSnapNum;
     PetaPM pm = {0};
     gravpm_init_periodic(&pm, All.BoxSize, All.Asmth, All.Nmesh, All.G);
+    
+    /*define excursion set PetaPM structs*/
+    /*because we need to FFT 3 grids, and we can't separate sets of regions, we need 3 PetaPM structs */
+    /*also, we will need different pencils and layouts due to different zero cells*/
+    /*NOTE: this produces three identical communicators TODO: write a quick way to give them all the same communicator*/    
+    PetaPM pm_mass = {0};
+    PetaPM pm_star = {0};
+    PetaPM pm_sfr = {0};
+    if(All.ExcursionSetReionOn){
+        petapm_init(&pm_mass, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
+        petapm_init(&pm_star, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
+        petapm_init(&pm_sfr, All.BoxSize, All.Asmth, All.UVBGdim, All.G, MPI_COMM_WORLD);
+    }
 
     DomainDecomp ddecomp[1] = {0};
 
@@ -390,6 +404,7 @@ run(int RestartSnapNum)
             /**** radiative cooling and star formation *****/
             if(All.CoolingOn)
                 cooling_and_starformation(&Act, &Tree, GradRho, FdSfr);
+            
 
             if(GradRho) {
                 myfree(GradRho);
@@ -406,10 +421,12 @@ run(int RestartSnapNum)
 
         int WriteSnapshot = 0;
         int WriteFOF = 0;
+        int CalcUVBG = 0;
 
         if(planned_sync) {
             WriteSnapshot |= planned_sync->write_snapshot;
             WriteFOF |= planned_sync->write_fof;
+            CalcUVBG |= planned_sync->calc_uvbg;
         }
 
         if(is_PM) { /* the if here is unnecessary but to signify checkpointing occurs only at PM steps. */
@@ -455,6 +472,26 @@ run(int RestartSnapNum)
             fof_save_groups(&fof, SnapshotFileCount, MPI_COMM_WORLD);
             fof_finish(&fof);
         }
+        
+        if(All.ExcursionSetReionOn){
+            if(CalcUVBG) {
+                calculate_uvbg(&pm_mass,&pm_star,&pm_sfr);
+                message(0,"uvbg calculated\n");
+
+                //since J21 is output to particles, we should only need to write these grids for debugging
+                //This function is currently WIP
+                //TODO: test the new grid-saving before including it in debug
+                //also pass in WriteSnapshot and SnapshotFileCount so I don't have to make UVBGgrids global
+#if 0
+                if(WriteSnapshot) {
+                    save_uvbg_grids(SnapshotFileCount,&pm_mass);
+                    message(0,"uvbg saved\n");
+                }
+#endif
+                myfree(UVBGgrids.xHI);
+                myfree(UVBGgrids.J21);
+            }
+        }
 
         write_cpu_log(NumCurrentTiStep, FdCPU);    /* produce some CPU usage info */
 
@@ -464,6 +501,7 @@ run(int RestartSnapNum)
 
         if(!next_sync || stop) {
             /* out of sync points, or a requested stop, the run has finally finished! Yay.*/
+            //message(1,"No more sync points, stop = %d\n",stop);
             break;
         }
 
@@ -484,6 +522,8 @@ run(int RestartSnapNum)
         /* We can now free the active list: the new step have new active particles*/
         free_activelist(&Act);
     }
+
+    //free_permanent_uvbg_grids();
 
     close_outputfiles();
 }
@@ -641,7 +681,7 @@ set_units(void)
     All.CP.Hubble = HUBBLE * All.UnitTime_in_s;
     All.CP.UnitTime_in_s = All.UnitTime_in_s;
 
-    init_cosmology(&All.CP, All.TimeIC);
+    init_cosmology(&All.CP, All.TimeIC, All.UnitLength_in_cm, All.UnitMass_in_g, All.UnitTime_in_s);
     /* Detect cosmologies that are likely to be typos in the parameter files*/
     if(All.CP.HubbleParam < 0.1 || All.CP.HubbleParam > 10 ||
         All.CP.OmegaLambda < 0 || All.CP.OmegaBaryon < 0 || All.CP.OmegaG < 0 || All.CP.OmegaCDM < 0)

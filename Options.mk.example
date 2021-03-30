@@ -7,6 +7,10 @@ OPTIMIZE =  -fopenmp -O3 -g -Wall -ffast-math
 #This is a good non-optimized default for debugging
 #OPTIMIZE =  -fopenmp -O0 -g -Wall
 
+#FFTW for the current excursion set implementation
+#FFTW_INCL = -I/apps/skylake/software/mpi/gcc/7.3.0/openmpi/3.0.0/fftw/3.3.7/include
+#FFTW_LIBS = -L/apps/skylake/software/mpi/gcc/7.3.0/openmpi/3.0.0/fftw/3.3.7/lib -lfftw3f -lfftw3f_mpi
+
 #--------------------------------------- Basic operation mode of code
 #OPT += VALGRIND     # allow debugging with valgrind, disable the GADGET memory allocator.
 #OPT += -DDEBUG      # print a lot of debugging messages

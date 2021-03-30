@@ -12,7 +12,7 @@
 
 static inline double OmegaFLD(const Cosmology * CP, const double a);
 
-void init_cosmology(Cosmology * CP, const double TimeBegin)
+void init_cosmology(Cosmology * CP, const double TimeBegin, double UnitLength, double UnitMass, double UnitTime)
 {
     /*With slightly relativistic massive neutrinos, for consistency we need to include radiation.
      * A note on normalisation (as of 08/02/2012):
@@ -23,6 +23,9 @@ void init_cosmology(Cosmology * CP, const double TimeBegin)
      */
     CP->OmegaCDM = CP->Omega0 - CP->OmegaBaryon;
     CP->OmegaK = 1.0 - CP->Omega0 - CP->OmegaLambda;
+
+    CP->G = GRAVITY / pow(UnitLength, 3) * UnitMass * pow(UnitTime, 2);
+    CP->RhoCrit = 3.0 * CP->Hubble * CP->Hubble / (8.0 * M_PI * CP->G);  // in internal units
 
     /* Omega_g = 4 \sigma_B T_{CMB}^4 8 \pi G / (3 c^3 H^2) */
 

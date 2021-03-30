@@ -129,7 +129,12 @@ static void do_density_test(void ** state, const int numpart, double expectedhsm
     CP.w0_fld = -1; /*Dark energy equation of state parameter*/
     /*Should be 0.1*/
     CP.Hubble = 0.1;
-    init_cosmology(&CP,0.01);
+    /*Default value for L=kpc v=km/s*/
+    double UnitTime_in_s = 3.08568e+16;
+    double UnitLength_in_cm = 3.085678e+21;
+    double UnitMass_in_g = 1.989e+43;
+    /*Do the main cosmology initialisation*/
+    init_cosmology(&CP,0.01,UnitLength_in_cm,UnitMass_in_g,UnitTime_in_s);
 
     density(&act, 1, 0, 0, 0, kick, &CP, &data->sph_pred, NULL, &tree);
     end = MPI_Wtime();
@@ -314,7 +319,7 @@ static struct ClockTable CT;
 
 static int setup_density(void **state) {
     /* Needed so the integer timeline works*/
-    setup_sync_points(0.01, 0.1, 0.0, 0);
+    setup_sync_points(NULL,0.01, 0.1, 0, 0.0, 0.0, 0.0, 0.0, 0);
 
     /*Reserve space for the slots*/
     slots_init(0.01 * PartManager->MaxPart, SlotsManager);

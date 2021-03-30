@@ -13,6 +13,7 @@
 #include "utils/mymalloc.h"
 #include "utils/interp.h"
 #include "utils/endrun.h"
+#include "allvars.h"
 
 static struct {
     int enabled;
@@ -148,7 +149,7 @@ init_uvf_table(const char * UVFluctuationFile, const double BoxSize, const doubl
  * Otherwise returns the global UVBG passed in.
  *
  * */
-struct UVBG get_local_UVBG(double redshift, double * Pos, const double * PosOffset)
+static struct UVBG get_local_UVBG_from_global(double redshift, double * Pos, const double * PosOffset)
 {
     if(fabs(redshift - GlobalUVRed) > 1e-4) {
         GlobalUVBG = get_global_UVBG(redshift);
@@ -177,6 +178,83 @@ struct UVBG get_local_UVBG(double redshift, double * Pos, const double * PosOffs
     return uvbg;
 }
 
+static struct UVBG get_local_UVBG_from_J21(double redshift, double J21) {
+    struct UVBG uvbg = {0};
+    
+    // N.B. J21 must be in units of 1e-21 erg s-1 Hz-1 (proper cm)-2 sr-1
+    uvbg.J_UV = J21;
+
+    //interpolators in cooling_rates.c should now be rate coeffs
+    //it seems a bit wasteful to calculate this for every particle
+    //but the global uv does an interpolation every time and this allows
+    //for future inhomogeneous alpha
+    //if this becomes a bottleneck we can set the coeffs globally
+    struct J21_coeffs J21toUV = get_J21_coeffs(All.AlphaUV);
+
+    uvbg.gJH0   = J21toUV.gJH0 * J21; // s-1
+    uvbg.epsH0  = J21toUV.epsH0 * J21 * 1.60218e-12;  // erg s-1
+    uvbg.gJHe0  = J21toUV.gJHe0 * J21; // s-1
+    uvbg.epsHe0 = J21toUV.epsHe0 * J21 * 1.60218e-12;  // erg s-1
+
+    /*Since the excursion set only finds HII (& HeII) bubbles, and HeII -> HeIII
+     * heating is taken care of by the qso_lightup model, there is never a case where we need these rates */
+    /* NOTE: this means that the excursion set will be switched off before helium reionisation
+     * and global rates must be used, otherwise helium will not ionise or heat */
+    /* the excursion set (so far) only includes stellar ionising radiation, so
+     * this is equivalent to the assumption that stars do not doubly ionise helium
+     * which will need to change if we decide to add QSO radiation to the excursion set (i.e Qin et al. 2017, DRAGONS X)*/
+    uvbg.gJHep = 0.;
+    uvbg.epsHep = 0.;
+
+    uvbg.self_shield_dens = get_self_shield_dens(redshift, &uvbg);
+
+    //TODO: make debug_printed a variable in this file that gets reset each timestep
+#if 0
+    //(jdavies) debugging messages, print's first particle's UVBG
+    //disabled for now to make the tests run through as it contains UVBGgrids
+    //uvbg.c contains a lot of other modules I'd have to include in the test compile
+    if(!UVBGgrids.debug_printed && uvbg.J_UV > 0)
+    {
+        message(0,"-----main UVBG for one particle-----\n");
+        message(0,"J_UV = %e\n",uvbg.J_UV);
+        message(0,"gJH0 = %e\n",uvbg.gJH0);
+        message(0,"gJHep = %e\n",uvbg.gJHep);
+        message(0,"gJHe0 = %e\n",uvbg.gJHe0);
+        message(0,"epsH0 = %e\n",uvbg.epsH0);
+        message(0,"epsHep = %e\n",uvbg.epsHep);
+        message(0,"epsHe0 = %e\n",uvbg.epsHe0);
+        message(0,"ssdens = %e\n",uvbg.self_shield_dens);
+
+        message(0,"-----coeffs for alpha = %.3f\n",All.AlphaUV);
+        message(0,"gJH0 = %e\n",J21toUV.gJH0);
+        message(0,"gJHep = %e\n",J21toUV.gJHep);
+        message(0,"gJHe0 = %e\n",J21toUV.gJHe0);
+        message(0,"epsH0 = %e\n",J21toUV.epsH0);
+        message(0,"epsHep = %e\n",J21toUV.epsHep);
+        message(0,"epsHe0 = %e\n",J21toUV.epsHe0);
+
+        UVBGgrids.debug_printed = 1;
+    }
+#endif
+
+    return uvbg;
+}
+
+//switch function that decides whether to use excursion set or global UV background
+/*TODO: there are a few continuity issues to consider fixing.
+ * if the z_reion tables provided finish after ExcursionSetZStop, particles could rapidly recombine.
+ * I'm not sure how initial heating from reionisation (see D'Aloisio et al. 2019) is handled here */
+struct UVBG get_local_UVBG(double redshift, double * Pos, const double * PosOffset, double J21)
+{
+    if(All.ExcursionSetReionOn && (redshift > All.ExcursionSetZStop))
+    {
+        return get_local_UVBG_from_J21(redshift,J21);
+    }
+    else
+    {
+        return get_local_UVBG_from_global(redshift,Pos,PosOffset);
+    }
+}
 
 /*Here comes the Metal Cooling code*/
 struct {

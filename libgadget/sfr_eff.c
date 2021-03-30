@@ -61,6 +61,7 @@ static struct SFRParams
 
     /* Input files for the various cooling modules*/
     char TreeCoolFile[100];
+    char J21CoeffFile[100];
     char MetalCoolFile[100];
     char UVFluctuationFile[100];
     /* File with the helium reionization table*/
@@ -116,6 +117,7 @@ void set_sfr_params(ParameterSet * ps)
 
         /* File names*/
         param_get_string2(ps, "TreeCoolFile", sfr_params.TreeCoolFile, sizeof(sfr_params.TreeCoolFile));
+        param_get_string2(ps, "J21CoeffFile", sfr_params.J21CoeffFile, sizeof(sfr_params.J21CoeffFile));
         param_get_string2(ps, "UVFluctuationfile", sfr_params.UVFluctuationFile, sizeof(sfr_params.UVFluctuationFile));
         param_get_string2(ps, "MetalCoolFile", sfr_params.MetalCoolFile, sizeof(sfr_params.MetalCoolFile));
         param_get_string2(ps, "ReionHistFile", sfr_params.ReionHistFile, sizeof(sfr_params.ReionHistFile));
@@ -377,7 +379,9 @@ cooling_direct(int i, const double a3inv, const double hubble)
     double uold = SPHP(i).Entropy * enttou;
 
     double redshift = 1./All.Time - 1;
-    struct UVBG uvbg = get_local_UVBG(redshift, P[i].Pos, PartManager->CurrentParticleOffset);
+    struct UVBG uvbg = get_local_UVBG(redshift, P[i].Pos, PartManager->CurrentParticleOffset, SPHP(i).local_J21);
+
+
     double unew = DoCooling(redshift, uold, SPHP(i).Density * a3inv, dtime, &uvbg, &ne, SPHP(i).Metallicity, All.MinEgySpec, P[i].HeIIIionized);
 
     SPHP(i).Ne = ne;
@@ -430,7 +434,7 @@ double get_neutral_fraction_sfreff(double redshift, struct particle_data * partd
     if(!All.CoolingOn)
         return 1;
     double nh0;
-    struct UVBG uvbg = get_local_UVBG(redshift, partdata->Pos, PartManager->CurrentParticleOffset);
+    struct UVBG uvbg = get_local_UVBG(redshift, partdata->Pos, PartManager->CurrentParticleOffset, sphdata->local_J21);
     double physdens = sphdata->Density * All.cf.a3inv;
 
     if(!All.StarformationOn || sfr_params.QuickLymanAlphaProbability > 0 || !sfreff_on_eeqos(sphdata, All.cf.a3inv)) {
@@ -460,7 +464,7 @@ double get_helium_neutral_fraction_sfreff(int ion, double redshift, struct parti
     if(!All.CoolingOn)
         return 1;
     double helium;
-    struct UVBG uvbg = get_local_UVBG(redshift, partdata->Pos, PartManager->CurrentParticleOffset);
+    struct UVBG uvbg = get_local_UVBG(redshift, partdata->Pos, PartManager->CurrentParticleOffset, sphdata->local_J21);
     double physdens = sphdata->Density * All.cf.a3inv;
 
     if(!All.StarformationOn || sfr_params.QuickLymanAlphaProbability > 0 || !sfreff_on_eeqos(sphdata, All.cf.a3inv)) {
@@ -527,7 +531,7 @@ cooling_relaxed(int i, double dtime, const double a3inv, struct sfr_eeqos_data s
         if(egycurrent > egyeff)
         {
             double redshift = 1./All.Time - 1;
-            struct UVBG uvbg = get_local_UVBG(redshift, P[i].Pos, PartManager->CurrentParticleOffset);
+            struct UVBG uvbg = get_local_UVBG(redshift, P[i].Pos, PartManager->CurrentParticleOffset, SPHP(i).local_J21);
             double ne = SPHP(i).Ne;
             /* In practice tcool << trelax*/
             double tcool = GetCoolingTime(redshift, egycurrent, SPHP(i).Density * All.cf.a3inv, &uvbg, &ne, SPHP(i).Metallicity);
@@ -658,7 +662,7 @@ struct sfr_eeqos_data get_sfr_eeqos(struct particle_data * part, struct sph_part
         data.tsfr = dtime;
 
     double redshift = 1./All.Time - 1;
-    struct UVBG uvbg = get_local_UVBG(redshift, part->Pos, PartManager->CurrentParticleOffset);
+    struct UVBG uvbg = get_local_UVBG(redshift, part->Pos, PartManager->CurrentParticleOffset, sph->local_J21);
 
     double factorEVP = pow(sph->Density * a3inv / sfr_params.PhysDensThresh, -0.8) * sfr_params.FactorEVP;
 
@@ -725,7 +729,7 @@ void init_cooling_and_star_formation(int CoolingOn)
     /*Enforces a minimum internal energy in cooling. */
     All.MinEgySpec = 1 / meanweight * (1.0 / GAMMA_MINUS1) * (BOLTZMANN / PROTONMASS) * sfr_params.MinGasTemp / coolunits.uu_in_cgs;
 
-    init_cooling(sfr_params.TreeCoolFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
+    init_cooling(sfr_params.TreeCoolFile, sfr_params.J21CoeffFile, sfr_params.MetalCoolFile, sfr_params.ReionHistFile, coolunits, &All.CP);
 
     if(!CoolingOn)
         return;

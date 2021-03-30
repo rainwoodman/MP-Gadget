@@ -1,0 +1,28 @@
+OutputDir = output_reion # Directory for output
+FileBase = IC              # Base-filename of output files
+
+Ngrid = 128 # Size of cubic grid on which to create particles.
+
+BoxSize = 40000   # Periodic box size of simulation
+
+Omega0 = 0.2814      # Total matter density  (at z=0)
+OmegaLambda = 0.7186      # Cosmological constant (at z=0)
+OmegaBaryon = 0.0464     # Baryon density        (at z=0)
+ProduceGas = 1         # 1 = Produce gas  0 = no gas, just DM.
+HubbleParam = 0.697      # Hubble paramater (may be used for power spec parameterization)
+
+Sigma8 = 0.810      # power spectrum normalization
+
+Redshift = 25        # Starting redshift
+
+DifferentTransferFunctions = 1
+#Tabulated output in Mpc/h units.
+FileWithInputSpectrum = ../class_pk_99.dat  # filename of tabulated input spectrum (if used)
+FileWithTransferFunction = ../class_tk_99.dat  # filename of transfer functions for different species
+
+WhichSpectrum = 2         # "1" selects Eisenstein & Hu spectrum,
+                           # "2" selects a tabulated power spectrum in
+                           # the file 'FileWithInputSpectrum'
+                           # otherwise, Efstathiou parametrization is used
+
+Seed = 181170    #  seed for IC-generator

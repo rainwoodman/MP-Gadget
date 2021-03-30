@@ -114,6 +114,15 @@ set_init_params(ParameterSet * ps)
             endrun(2, "You have enabled (kspace) massive neutrinos without radiation, but this will give an inconsistent cosmology!\n");
         /*End massive neutrino parameters*/
 
+        /*Parameters for the Excursion Set Algorithm*/
+        All.ExcursionSetReionOn = param_get_int(ps, "ExcursionSetReionOn");
+        All.ExcursionSetZStop = param_get_double(ps, "ExcursionSetZStop");
+        All.ExcursionSetZStart = param_get_double(ps, "ExcursionSetZStart");
+        All.UVBGdim = param_get_int(ps, "UVBGdim");
+        All.AlphaUV = param_get_double(ps, "AlphaUV");
+        All.UVBGTimestep = param_get_double(ps, "UVBGTimestep");
+        /*End Parameters for the Excursion Set Algorithm*/
+
         if(All.StarformationOn == 0)
         {
             if(All.WindOn == 1) {
@@ -150,17 +159,17 @@ inttime_t init(int RestartSnapNum, DomainDecomp * ddecomp)
     /*Add TimeInit and TimeMax to the output list*/
     if (RestartSnapNum < 0) {
         /* allow a first snapshot at IC time; */
-        setup_sync_points(All.TimeIC, All.TimeMax, 0.0, All.SnapshotWithFOF);
+        setup_sync_points(&All.CP,All.TimeIC, All.TimeMax, All.ExcursionSetReionOn, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, 0.0, All.SnapshotWithFOF);
     } else {
         /* skip dumping the exactly same snapshot */
-        setup_sync_points(All.TimeIC, All.TimeMax, All.TimeInit, All.SnapshotWithFOF);
+        setup_sync_points(&All.CP,All.TimeIC, All.TimeMax, All.ExcursionSetReionOn, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, All.TimeInit, All.SnapshotWithFOF);
         /* If TimeInit is not in a sensible place on the integer timeline
          * (can happen if the outputs changed since it was written)
          * start the integer timeline anew from TimeInit */
         inttime_t ti_init = ti_from_loga(log(All.TimeInit)) % TIMEBASE;
         if(round_down_power_of_two(ti_init) != ti_init) {
             message(0,"Resetting integer timeline (as %x != %x) to current snapshot\n",ti_init, round_down_power_of_two(ti_init));
-            setup_sync_points(All.TimeInit, All.TimeMax, All.TimeInit, All.SnapshotWithFOF);
+            setup_sync_points(&All.CP,All.TimeInit, All.TimeMax, All.ExcursionSetReionOn, All.ExcursionSetZStart, All.ExcursionSetZStop, All.UVBGTimestep, All.TimeInit, All.SnapshotWithFOF);
         }
     }
 
@@ -247,6 +256,7 @@ inttime_t init(int RestartSnapNum, DomainDecomp * ddecomp)
             SPHP(i).Metals[1] = 1- HYDROGEN_MASSFRAC;
             SPHP(i).Sfr = 0;
             SPHP(i).MaxSignalVel = 0;
+            SPHP(i).local_J21 = 0;
         }
     }
 

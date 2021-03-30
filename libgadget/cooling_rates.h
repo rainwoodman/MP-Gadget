@@ -64,7 +64,7 @@ void set_coolpar(struct cooling_params cp);
 
 /*Initialize the cooling rate module. This builds a lot of interpolation tables.
  * Defaults: TCMB 2.7255, recomb = Verner96, cooling = Sherwood.*/
-void init_cooling_rates(const char * TreeCoolFile, const char * MetalCoolFile, Cosmology * CP);
+void init_cooling_rates(const char * TreeCoolFile, const char * J21CoeffFile, const char * MetalCoolFile, Cosmology * CP);
 
 /* Reads and initializes the cloudy metal cooling table. Called in init_cooling_rates. No need to call it separately.*/
 void InitMetalCooling(const char * MetalCoolFile);
@@ -112,5 +112,11 @@ double get_neutral_fraction_phys_cgs(double density, double ienergy, double heli
 
 /* Get the helium ionic fractions at a temperature and density. Same conventions as above*/
 double get_helium_ion_phys_cgs(int ion, double density, double ienergy, double helium, const struct UVBG * uvbg, double ne_init);
+
+/* get self_shielding density from uvbg (added to .h by jdavies or uvfluc) */
+double get_self_shield_dens(double redshift, const struct UVBG * uvbg);
+
+/* get ionrate coefficients for excursion set*/
+struct J21_coeffs get_J21_coeffs(double alpha);
 
 #endif

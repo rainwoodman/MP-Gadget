@@ -91,6 +91,19 @@ static struct itp_type Gamma_HI, Gamma_HeI, Gamma_HeII;
 /*These are the photo-heating rates*/
 static struct itp_type Eps_HI, Eps_HeI, Eps_HeII;
 
+/*Interpolation objects for the alpha evolution of the Excursion set rates UVB.*/
+/*Number of entries in the table*/
+//TODO(jdavies): If i put these rates in a struct, and pass into a more generalised load_treecool()
+//it would mean fewer functions that basically do the same thing
+static int NJ21Coeffs;
+/*spectral slope bins*/
+static double * Gamma_alpha;
+/*These are the photo-ionization rates*/
+static struct itp_type G_HI_coeff, G_HeI_coeff, G_HeII_coeff;
+/*These are the photo-heating rates*/
+static struct itp_type Eps_HI_coeff, Eps_HeI_coeff, Eps_HeII_coeff;
+
+
 /*Recombination and collisional rates*/
 #define NRECOMBTAB 1000
 #define RECOMBTMAX log(1e9)
@@ -210,6 +223,95 @@ load_treecool(const char * TreeCoolFile)
     message(0, "Read %d lines z = %g - %g from file %s\n", NTreeCool, pow(10, Gamma_log1z[0])-1, pow(10, Gamma_log1z[NTreeCool-1])-1, TreeCoolFile);
 }
 
+/* This function loads the J21 rate coeff file into the (global function) data arrays.
+ * very similar to load_treecool TODO: generalize this
+ * Format of the treecool table:
+    alpha, Gamma_HI, Gamma_HeI, Gamma_HeII,  Qdot_HI, Qdot_HeI, Qdot_HeII,
+    where 'Gamma' is the photoionization rate and 'Qdot' is the photoheating rate.
+    The Gamma's are in units of s^-1, and the Qdot's are in units of erg s^-1.
+*/
+static void
+load_J21coeffs(const char * J21CoeffFile)
+{
+    FILE * fd = fopen(J21CoeffFile, "r");
+    if(!fd)
+        endrun(456, "Could not open rate coefficients file at: '%s'\n", J21CoeffFile);
+
+    /*Find size of file*/
+    NJ21Coeffs = 0;
+    do
+    {
+        char buffer[1024];
+        char * retval = fgets(buffer, 1024, fd);
+        /*Happens on end of file*/
+        if(!retval)
+            break;
+        retval = strtok(buffer, " \t");
+        /*Discard comments*/
+        if(!retval || retval[0] == '#')
+            continue;
+        NJ21Coeffs++;
+    }
+    while(1);
+    rewind(fd);
+
+    MPI_Bcast(&(NJ21Coeffs), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    if(NJ21Coeffs<= 2)
+        endrun(1, "Photon background contains: %d entries, not enough.\n", NJ21Coeffs);
+
+    /*Allocate memory for the photon background table.*/
+    Gamma_alpha = mymalloc("J21CoeffTable", 7 * NJ21Coeffs * sizeof(double));
+    G_HI_coeff.ydata = Gamma_alpha + NJ21Coeffs;
+    G_HeI_coeff.ydata = Gamma_alpha + 2 * NJ21Coeffs;
+    G_HeII_coeff.ydata = Gamma_alpha + 3 * NJ21Coeffs;
+    Eps_HI_coeff.ydata = Gamma_alpha + 4 * NJ21Coeffs;
+    Eps_HeI_coeff.ydata = Gamma_alpha + 5 * NJ21Coeffs;
+    Eps_HeII_coeff.ydata = Gamma_alpha + 6 * NJ21Coeffs;
+
+    int ThisTask;
+    MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
+    if(ThisTask == 0)
+    {
+        int i = 0;
+        while(i < NJ21Coeffs)
+        {
+            char buffer[1024];
+            char * saveptr;
+            char * line = fgets(buffer, 1024, fd);
+            /*Happens on end of file*/
+            if(!line)
+                break;
+            char * retval = strtok_r(line, " \t", &saveptr);
+            if(!retval || retval[0] == '#')
+                continue;
+            Gamma_alpha[i] = atof(retval);
+            /*Get the rest*/
+            G_HI_coeff.ydata[i]   = load_tree_value(&saveptr);
+            G_HeI_coeff.ydata[i]  = load_tree_value(&saveptr);
+            G_HeII_coeff.ydata[i] = load_tree_value(&saveptr);
+            Eps_HI_coeff.ydata[i]     = load_tree_value(&saveptr)+ CoolingParams.HydrogenHeatAmp;
+            Eps_HeI_coeff.ydata[i]    = load_tree_value(&saveptr);
+            Eps_HeII_coeff.ydata[i]   = load_tree_value(&saveptr);
+            i++;
+        }
+
+        fclose(fd);
+    }
+
+    /*Broadcast data to other processors*/
+    MPI_Bcast(Gamma_alpha, 7 * NJ21Coeffs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    /*Initialize the UVB redshift interpolation: reticulate the splines*/
+    init_itp_type(Gamma_alpha, &G_HI_coeff, NJ21Coeffs);
+    init_itp_type(Gamma_alpha, &G_HeI_coeff, NJ21Coeffs);
+    init_itp_type(Gamma_alpha, &G_HeII_coeff, NJ21Coeffs);
+    init_itp_type(Gamma_alpha, &Eps_HI_coeff, NJ21Coeffs);
+    init_itp_type(Gamma_alpha, &Eps_HeI_coeff, NJ21Coeffs);
+    init_itp_type(Gamma_alpha, &Eps_HeII_coeff, NJ21Coeffs);
+
+    message(0, "Read %d lines alpha = %g - %g, GHI %g - %g from file %s\n", NJ21Coeffs, Gamma_alpha[0], Gamma_alpha[NJ21Coeffs-1], G_HI_coeff.ydata[0], G_HI_coeff.ydata[NJ21Coeffs-1], J21CoeffFile);
+}
+
 /*Get photo ionization rate for neutral Hydrogen*/
 static double
 get_photo_rate(double redshift, struct itp_type * Gamma_tab)
@@ -240,8 +342,8 @@ get_photo_rate(double redshift, struct itp_type * Gamma_tab)
   At higher redshifts than this was computed,
   we keep the self-shielding density constant. In reality the reionization model should take over.
 */
-static double
-self_shield_dens(double redshift, const struct UVBG * uvbg)
+double
+get_self_shield_dens(double redshift, const struct UVBG * uvbg)
 {
     /*Before the UVBG switches on, no need for self-shielding*/
     if(uvbg->gJH0 == 0)
@@ -283,8 +385,41 @@ struct UVBG get_global_UVBG(double redshift)
         GlobalUVBG.epsHep = 0;
     else
         GlobalUVBG.epsHep = get_photo_rate(redshift, &Eps_HeII);
-    GlobalUVBG.self_shield_dens = self_shield_dens(redshift, &GlobalUVBG);
+    GlobalUVBG.self_shield_dens = get_self_shield_dens(redshift, &GlobalUVBG);
     return GlobalUVBG;
+}
+
+/*Get photo ionization rate coeff*/
+/*TODO(jdavies): this is very similar to get_photo_rate, and only one is used, find a way to combine*/
+/*would need to change z to log(1+z) input in photorate and remove 10^x*/
+static double
+get_photorate_coeff(double alpha, struct itp_type * Gamma_tab)
+{
+    double photo_rate;
+    if (alpha >= Gamma_alpha[NJ21Coeffs - 1])
+        return 0;
+    else if (alpha < Gamma_alpha[0])
+        photo_rate = Gamma_tab->ydata[0];
+    else {
+        photo_rate = gsl_interp_eval(Gamma_tab->intp, Gamma_alpha, Gamma_tab->ydata, alpha, NULL);
+    }
+    //pow 10 here because the treecool load does log10
+    return pow(10,photo_rate) * CoolingParams.PhotoIonizeFactor;
+}
+
+/* gets J21==1 rates from interpolation tables*/
+/*TODO(jdavies): combine with get_global_UVBG somehow*/
+struct J21_coeffs get_J21_coeffs(double alpha)
+{
+    struct J21_coeffs J21toUV;
+    J21toUV.gJH0 = get_photorate_coeff(alpha, &G_HI_coeff);
+    J21toUV.gJHe0 = get_photorate_coeff(alpha, &G_HeI_coeff);
+    J21toUV.gJHep = get_photorate_coeff(alpha, &G_HeII_coeff);
+
+    J21toUV.epsH0 = get_photorate_coeff(alpha, &Eps_HI_coeff);
+    J21toUV.epsHe0 = get_photorate_coeff(alpha, &Eps_HeI_coeff);
+    J21toUV.epsHep = get_photorate_coeff(alpha, &Eps_HeII_coeff);
+    return J21toUV;
 }
 
 /*Correction to the photoionisation rate as a function of density from Rahmati 2012, eq. 14.
@@ -566,7 +701,7 @@ nHe_internal(double nh, double logt, double ne, const struct UVBG * uvbg, double
     }
     else {
         He.nHep = 0;
-        He.nHe0 = 1;
+        He.nHe0 = nh;
         He.nHepp = 0;
     }
     return He;
@@ -960,7 +1095,7 @@ set_cooling_params(ParameterSet * ps)
 /*Initialize the cooling rate module. This builds a lot of interpolation tables.
  * Defaults: TCMB 2.7255, recomb = Verner96, cooling = Sherwood.*/
 void
-init_cooling_rates(const char * TreeCoolFile, const char * MetalCoolFile, Cosmology * CP)
+init_cooling_rates(const char * TreeCoolFile, const char * J21CoeffFile, const char * MetalCoolFile, Cosmology * CP)
 {
     CoolingParams.fBar = CP->OmegaBaryon / CP->OmegaCDM;
     CoolingParams.rho_crit_baryon = CP->OmegaBaryon * 3.0 * pow(CP->HubbleParam*HUBBLE,2.0) /(8.0*M_PI*GRAVITY);
@@ -978,6 +1113,16 @@ init_cooling_rates(const char * TreeCoolFile, const char * MetalCoolFile, Cosmol
         message(0, "Using uniform UVB from file %s\n", TreeCoolFile);
         /* Load the TREECOOL into Gamma_HI->ydata, and initialise the interpolators*/
         load_treecool(TreeCoolFile);
+    }
+
+    if(!J21CoeffFile || strnlen(J21CoeffFile,100) == 0) {
+        //TODO: set excursion set flag to zero, but that requires allvars at the moment
+        message(0, "No Coeff file is provided. OK for non-excursionset runs. \n");
+    }
+    else {
+        message(0, "Using J21 coeffs UVB from file %s\n", J21CoeffFile);
+        /* Load the TREECOOL into Gamma_HI->ydata, and initialise the interpolators*/
+        load_J21coeffs(J21CoeffFile);
     }
 
     /*Initialize the recombination tables*/

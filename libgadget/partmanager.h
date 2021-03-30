@@ -14,9 +14,14 @@ struct particle_data
     double Pos[3];   /*!< particle position at its current time */
     float Mass;     /*!< particle mass */
 
+    /* particle type.  0=gas, 1=halo, 2=disk, 3=bulge, 4=stars, 5=bndry */
+    /* TODO(jdavies): I moved this out of the bitfield because i need to access it by pointer in petapm.c
+     * This could also be done by passing a struct pointer instead of void* as the petapm pstruct */
+    int Type;
     struct {
         /* particle type.  0=gas, 1=halo, 2=disk, 3=bulge, 4=stars, 5=bndry */
-        unsigned int Type                 :4;
+        //unsigned int Type                 :4;
+        unsigned int                      :4; /* UNUSED bits put here to maintain bit alignment */
 
         unsigned int IsGarbage            :1; /* True for a garbage particle. readonly: Use slots_mark_garbage to mark this.*/
         unsigned int Swallowed            :1; /* True if the particle is being swallowed; used in BH to determine swallower and swallowee;*/

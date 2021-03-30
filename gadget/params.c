@@ -20,6 +20,7 @@
 #include <libgadget/timebinmgr.h>
 #include <libgadget/petaio.h>
 #include <libgadget/cooling_qso_lightup.h>
+#include <libgadget/uvbg.h>
 #include <libgadget/metal_return.h>
 
 static int
@@ -325,6 +326,24 @@ create_gadget_parameter_set()
     param_declare_double(ps, "NuPartTime", OPTIONAL, 0.3333333, "Scale factor at which to turn on hybrid neutrino particles.");
     /*End parameters for the massive neutrino model*/
 
+    /*Parameters for the Excursion Set Algorithm*/
+    param_declare_int(ps, "ExcursionSetReionOn", OPTIONAL, 0, "Use the excursion set instead of the global UV field");
+    param_declare_int(ps, "UVBGdim", OPTIONAL, 64, "Number of cells on a side of the excursion set grid. Resolution = BoxSize/UVBGdim");
+    param_declare_int(ps, "ReionFilterType", OPTIONAL, 0, "Filter type for Excursion set: 0 = real-space top-hat, 1 = k-space top-hat, 2 = gaussian");
+    param_declare_int(ps, "RtoMFilterType", OPTIONAL, 0, "Filter type for radius to mass calculation: 0 = top-hat, 1 = gaussian");
+    param_declare_double(ps, "ReionRBubbleMax", OPTIONAL, 20340, "Maximum radius of excursion set filters in internal units");
+    param_declare_double(ps, "ReionRBubbleMin", OPTIONAL, 406.8, "Minimum radius of excursion set filters in internal units");
+    param_declare_double(ps, "ReionDeltaRFactor", OPTIONAL, 1.1, "Fractional difference between excursion set bubble sizes.");
+    param_declare_double(ps, "ReionGammaHaloBias", OPTIONAL, 2.0, "Halo Bias for calculating J21.");
+    param_declare_double(ps, "ReionNionPhotPerBary", OPTIONAL, 4000., "Photons produced per stellar baryon.");
+    param_declare_double(ps, "AlphaUV", OPTIONAL, 3., "Spectral slope of ionising radiation above the Hydrogen ionisation threshold.");
+    param_declare_double(ps, "EscapeFraction", OPTIONAL, 1., "Constant escape fraction of ionising photons from galaxies.");
+    param_declare_double(ps, "UVBGTimestep", OPTIONAL, 10., "Time in Myr between UVBG calculations.");
+    param_declare_string(ps, "J21CoeffFile", OPTIONAL, "", "Rate coefficient table for converting J21 to photo ion/heating rates at a certain spectral slope");
+    param_declare_double(ps, "ExcursionSetZStop", OPTIONAL, 5., "Redshift at which we stop the excursion set and use global UVBG");
+    param_declare_double(ps, "ExcursionSetZStart", OPTIONAL, 25., "Redshift at which we start the excursion set");
+    /*End Parameters for the Excursion Set Algorithm*/
+
     param_set_action(ps, "BlackHoleFeedbackMethod", BlackHoleFeedbackMethodAction, NULL);
     param_set_action(ps, "StarformationCriterion", StarformationCriterionAction, NULL);
     param_set_action(ps, "OutputList", OutputListAction, NULL);
@@ -376,6 +395,7 @@ void read_parameter_file(char *fname, int * ShowBacktrace, double * MaxMemSizePe
     set_gravshort_tree_params(ps);
     set_domain_params(ps);
     set_sfr_params(ps);
+    set_uvbg_params(ps);
     set_winds_params(ps);
     set_fof_params(ps);
     set_blackhole_params(ps);
