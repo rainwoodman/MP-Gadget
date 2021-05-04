@@ -57,8 +57,7 @@ petapm_alloc_rhok(PetaPM * pm)
 static void pm_init_regions(PetaPM * pm, PetaPMRegion * regions, const int Nregions);
 
 static PetaPMParticleStruct * CPS; /* stored by petapm_force, how to access the P array */
-static PetaPMReionPartStruct * CPS_R; /* stored by petapm_force, how to access the P array */
-static double F_MASS_SCALING; /* This needs to be available in the iterator */
+static PetaPMReionPartStruct * CPS_R; /* stored by petapm_force, how to access other properties in P, SphP, and Fof */
 #define POS(i) ((double*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS->offset_pos]))
 #define MASS(i) ((float*) (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS->offset_mass]))
 #define INACTIVE(i) (CPS->active && !CPS->active(i))
@@ -66,12 +65,9 @@ static double F_MASS_SCALING; /* This needs to be available in the iterator */
 /* (jdavies) reion defs */
 #define TYPE(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_type]))
 #define PI(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_pi]))
+#define FESC(i) ((float*) (&((char*)CPS_R->Starslot)[CPS_R->star_elsize * *PI(i) + CPS_R->offset_fesc]))
 /*TODO: this is a MyFloat, also not currently used and possibly broken*/
 #define SFR(i) ((double*)  (&((char*)CPS_R->Sphslot)[CPS_R->sph_elsize * *PI(i) + CPS_R->offset_sfr]))
-
-//FOFMASS will need pointer to the fof groups + fof element size + mass offset
-#define GROUPNO(i) ((int*) (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_grnr]))
-#define FOFMASS(i) ((double*) (&((char*)CPS_R->Fof)[CPS_R->fof_elsize * GROUPNO(i) + CPS_R->offset_fofmass]))
 
 PetaPMRegion * petapm_get_fourier_region(PetaPM * pm) {
     return &pm->fourier_space_region;
@@ -468,7 +464,7 @@ petapm_reion_c2r(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
 
         double * star_real = (double * ) mymalloc2("star_real", pm_star->priv->fftsize * sizeof(double));
         double * sfr_real = (double * ) mymalloc2("sfr_real", pm_sfr->priv->fftsize * sizeof(double));
-        
+
         /* back to real space */
         pfft_execute_dft_c2r(pm_mass->priv->plan_back, mass_filtered, mass_real);
         pfft_execute_dft_c2r(pm_star->priv->plan_back, star_filtered, star_real);
@@ -510,16 +506,31 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         PetaPMGlobalFunctions * global_functions, //petapm_transfer_func global_transfer,
         PetaPMFunctions * functions,
         PetaPMParticleStruct * pstruct,
-        PetaPMReionPartStruct * pstruct,
+        PetaPMReionPartStruct * rstruct,
         petapm_reion_func reion_loop,
         double R_max, double R_min, double R_delta,
-        double fesc_scaling,
         void * userdata) {
     
     //assigning CPS here due to three sets of regions
     CPS = pstruct;
     CPS_R = rstruct;
-    F_MASS_SCALING = fesc_scaling;
+    
+    int i_star = -10;
+    for(int ii = CPS->NumPart; ii >= 0; ii --) {
+        if(*TYPE(ii) == 4) {
+            i_star = ii;
+            break;
+        }
+    }
+   
+    if(i_star > 0) {
+        //#define PI(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_pi]))
+        message(1,"last star idx inside petapm = %d, Type = %d, PI = %d\n",i_star,*TYPE(i_star),*PI(i_star));
+        message(1,"has fesc = %e\n",*FESC(i_star));
+        message(1,"total indices (PI,fesc) = (%d, %d)\n"
+                ,CPS->elsize * (i_star) + CPS_R->offset_pi
+                , CPS_R->star_elsize * *PI(i_star) + CPS_R->offset_fesc);
+    }
 
     /* initialise regions for each grid
      * NOTE: these regions should be identical except for the grid buffer */
@@ -534,7 +545,8 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     pfft_complex * mass_unfiltered = petapm_force_r2c(pm_mass, global_functions);
     pfft_complex * star_unfiltered = petapm_force_r2c(pm_star, global_functions);
     pfft_complex * sfr_unfiltered = petapm_force_r2c(pm_sfr, global_functions);
-    
+
+    message(1,"starting c2r\n");
     //need custom reion_c2r to implement the 3 grid c2r and readout
     //the readout is only performed on the mass grid so for now I only pass in regions/Nregions for mass
     if(functions)
@@ -1129,19 +1141,21 @@ static void put_particle_to_mesh(PetaPM * pm, int i, double * mesh, double weigh
 }
 //escape fraction scaled GSM
 static void put_star_to_mesh(PetaPM * pm, int i, double * mesh, double weight) {
-    double Mass = *MASS(i);
-    double FOFMass = *FOFMASS(i);
     if(INACTIVE(i) || *TYPE(i) != 4)
         return;
+    double Mass = *MASS(i);
+    float fesc = *FESC(i);
 #pragma omp atomic update
-    mesh[0] += weight * Mass * pow(FOFMass/1e10,F_MASS_SCALING);
+    mesh[0] += weight * Mass * fesc;
 }
+//escape fraciton scaled SFR
 static void put_sfr_to_mesh(PetaPM * pm, int i, double * mesh, double weight) {
     if(INACTIVE(i) || *TYPE(i) != 0)
         return;
     double Sfr = *SFR(i);
+    float fesc = *FESC(i);
 #pragma omp atomic update
-    mesh[0] += weight * Sfr;
+    mesh[0] += weight * Sfr * fesc;
 }
 static int64_t reduce_int64(int64_t input, MPI_Comm comm) {
     int64_t result = 0;

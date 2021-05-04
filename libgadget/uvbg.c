@@ -30,6 +30,7 @@
 #include "walltime.h"
 #include "petaio.h"
 #include "fof.h"
+//#include "treewalk.h"
 
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
@@ -46,7 +47,8 @@ static struct UVBGParams {
     double ReionGammaHaloBias;
     double ReionNionPhotPerBary;
     //double AlphaUV;
-    double EscapeFraction;
+    double EscapeFractionNorm;
+    double EscapeFractionScaling;
 
 } uvbg_params;
 
@@ -67,10 +69,10 @@ void set_uvbg_params(ParameterSet * ps) {
         uvbg_params.ReionGammaHaloBias = param_get_double(ps, "ReionGammaHaloBias");
         uvbg_params.ReionNionPhotPerBary = param_get_double(ps, "ReionNionPhotPerBary");
         //uvbg_params.AlphaUV = param_get_double(ps, "AlphaUV");
-        uvbg_params.EscapeFraction = param_get_double(ps, "EscapeFraction");
+        uvbg_params.EscapeFractionNorm = param_get_double(ps, "EscapeFractionNorm");
+        uvbg_params.EscapeFractionScaling = param_get_double(ps, "EscapeFractionScaling");
     }
     MPI_Bcast(&uvbg_params, sizeof(struct UVBGParams), MPI_BYTE, 0, MPI_COMM_WORLD);
-
 }
 
 int grid_index(int i, int j, int k, ptrdiff_t strides[3])
@@ -264,10 +266,10 @@ static void print_reion_debug_info(PetaPM * pm_mass, float * J21, float * xHI, d
     double max_sfr = 0;
     int neutral_count = 0;
     int ion_count = 0;
-    int pm_idx = 0;
+    int pm_idx;
     int uvbg_dim = All.UVBGdim;
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
-    #pragma omp parallel for collapse(3) reduction(+:neutral_count,ion_count) reduction(min:min_J21,min_mass,min_star,min_sfr) reduction(max:max_J21,max_mass,max_star,max_sfr) private(pm_idx)
+#pragma omp parallel for collapse(3) reduction(+:neutral_count,ion_count) reduction(min:min_J21,min_mass,min_star,min_sfr) reduction(max:max_J21,max_mass,max_star,max_sfr) private(pm_idx)
     for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
         for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
             for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
@@ -328,7 +330,6 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     //double ReionGammaHaloBias = uvbg_params.ReionGammaHaloBias;
     const double ReionNionPhotPerBary = uvbg_params.ReionNionPhotPerBary;
     double alpha_uv = All.AlphaUV;
-    double EscapeFraction = uvbg_params.EscapeFraction;
 
     // TODO(smutch): tidy this up!
     // The following is based on Sobacchi & Messinger (2013) eqn 7
@@ -336,7 +337,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     // and also with the inclusion of the effects of the Helium fraction.
     const double Y_He = 1.0 - HYDROGEN_MASSFRAC;
     const double BaryonFrac = All.CP.OmegaBaryon / All.CP.Omega0;
-    double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary * EscapeFraction / (1.0 - 0.75 * Y_He);
+    double ReionEfficiency = 1.0 / BaryonFrac * ReionNionPhotPerBary / (1.0 - 0.75 * Y_He);
     
     const double tot_n_cells = pm_mass->Nmesh * pm_mass->Nmesh * pm_mass->Nmesh; 
     const double pixel_volume = pm_mass->CellSize * pm_mass->CellSize * pm_mass->CellSize;
@@ -346,16 +347,15 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     float* xHI = UVBGgrids.xHI;
     
     // Perform sanity checks to account for aliasing effects
-    #pragma omp parallel for collapse(3) private(pm_idx)
+#pragma omp parallel for collapse(3) private(pm_idx)
     for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
         for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
             for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
                 pm_idx = grid_index(ix, iy, iz, pm_mass->real_space_region.strides);
                 mass_real[pm_idx] = fmax(mass_real[pm_idx], 0.0);
                 star_real[pm_idx] = fmax(star_real[pm_idx], 0.0);
-                sfr_real[pm_idx] = fmax(sfr_real[pm_idx], 0.0);
+                //sfr_real[pm_idx] = fmax(sfr_real[pm_idx], 0.0);
             }
-
 
     const double J21_aux_constant = (1.0 + redshift) * (1.0 + redshift) / (4.0 * M_PI)
         * alpha_uv * PLANCK * 1e21
@@ -365,7 +365,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     const double hubble_time = 1 / (hubble_function(&All.CP,All.Time) * All.CP.HubbleParam);
 
     // Main loop through the box
-    #pragma omp parallel for collapse(3) private(pm_idx,density_over_mean,f_coll_stars,sfr_density)
+#pragma omp parallel for collapse(3) private(pm_idx,density_over_mean,f_coll_stars,sfr_density)
     for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
         for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
             for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
@@ -415,6 +415,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     if(last_step){
 
 #ifdef DEBUG
+        message(1,"printing info c2r\n");
         print_reion_debug_info(pm_mass,J21,xHI,mass_real,star_real,sfr_real);
 #endif
 
@@ -424,7 +425,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
         int uvbg_dim = All.UVBGdim;
         int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
         //TODO: this directive is ridiculous and I doubt the parallelisation does much here
-        #pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI,mass_weighted_global_xHI,mass_weight) private(pm_idx,density_over_mean)
+#pragma omp parallel for collapse(3) reduction(+:volume_weighted_global_xHI,mass_weighted_global_xHI,mass_weight) private(pm_idx,density_over_mean)
         for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
             for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
                 for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
@@ -457,6 +458,139 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
 static void readout_J21(PetaPM * pm, int i, double * mesh, double weight) {
     if (P[i].Type == 0)
         SPHP(i).local_J21 += weight * mesh[0];
+    //TODO: add heating here (see qso code) by adding to entropy
+}
+
+#if 0
+/* TODO: finish this for more effeicient memory usage */
+static int uvbg_treefind(TreeWalkQueryBase * I,
+                        TreeWalkNgbIterBase * iter,
+                        int startnode,
+                        LocalTreeWalk * lv)
+{
+    int no;
+    int numcand = 0;
+    
+    const ForceTree * tree = lv->tw->tree;
+    const double BoxSize = tree->BoxSize;
+    
+    no = startnode;
+    
+    while(no >= 0)
+    {
+        struct NODE *current = &tree->Nodes[no];
+        
+        /* When walking exported particles we start from the
+        * encompassing top-level node,
+        * so if we get back to a top-level node again we are done.*/
+        /* The first node is always top-level*/
+        if(current->f.TopLevel && !current->f.InternalTopLevel) {
+            /* Code that adds the relevant task to a list of tasks
+            * for this FOF halo*/
+            no = current->sibling;
+            continue;
+        }
+
+        /* Cull the node: use iter->Hsml as the (or 1.5x) virial radius
+        * of the halo so that includes all halo particles. */
+        if(0 == cull_node(I, iter, current, BoxSize)) {
+            /* in case the node can be discarded */
+            no = current->sibling;
+            continue;
+        }
+    
+    /* ok, we need to open the node */
+    no = current->s.suns[0];
+    }
+
+    return numcand;
+}
+#endif
+
+/* sets particle properties needed for the Excursion Set */
+void init_particle_uvbg(FOFGroups * fof){
+
+    double * all_halomass = mymalloc("all_halomass",sizeof(double) * fof->TotNgroups);
+    int * all_grnr = mymalloc("all_grnr",sizeof(int) * fof->TotNgroups);
+
+    double * local_halomass = mymalloc("local_halomass",sizeof(double) * fof->Ngroups);
+    int * local_grnr = mymalloc("local_grnr",sizeof(int) * fof->Ngroups);
+
+    /* Fill local FOF mass arrays */
+    for (int ii=0;ii<fof->Ngroups;ii++)
+    {
+        local_halomass[ii] = fof->Group[ii].Mass;
+        local_grnr[ii] = fof->Group[ii].base.GrNr;
+    }
+    
+    /* Do Treewalk to get list of tasks per FOFGroup */
+    //uvbg_treefind(fof,task_array,tree);
+    /* Distribute FOF mass arrays to appropriate tasks */
+    //TODO: don't just allgather for big runs
+    int j,NTask, ThisTask;
+    int ngr;
+    MPI_Comm_size(MPI_COMM_WORLD, &NTask);
+    MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
+    
+    ngr = fof->Ngroups;
+    int * ngra = mymalloc("NGRA", sizeof(int) * NTask);
+    int * offseta = mymalloc("OFFA", sizeof(int) * NTask);
+
+    MPI_Allgather(&ngr, 1, MPI_INT, ngra, 1, MPI_INT, MPI_COMM_WORLD);
+
+    int offset = 0;
+    for(j = 0; j < NTask; j++){
+        offseta[j] = offset;
+        offset += ngra[j];
+    }
+    
+    MPI_Allgatherv(local_halomass,fof->Ngroups,MPI_DOUBLE,all_halomass,ngra,offseta,MPI_DOUBLE,MPI_COMM_WORLD);
+    MPI_Allgatherv(local_grnr,fof->Ngroups,MPI_INT,all_grnr,ngra,offseta,MPI_INT,MPI_COMM_WORLD);
+    
+    myfree(offseta);
+    myfree(ngra);
+
+    myfree(local_grnr);
+    myfree(local_halomass);
+
+    /* Assign FOF masses to particles in this loop OR have good way to index communicated arrays */
+    //need to convert halo mass to 1e10 solar
+    double fesc_unit_conv = All.UnitMass_in_g / SOLAR_MASS / 1e10 / All.CP.HubbleParam;
+    float fesc_temp;
+    
+    //Reset local J21
+    int i_star = -10;
+#pragma omp parallel for
+    for(int ii = 0; ii < PartManager->NumPart; ii++) {
+        if(P[ii].Type == 0) {
+            SPHP(ii).local_J21 = 0.;
+        }
+        //Assign escape fractions to star particles
+        //TODO: this is O(stars*fofgroups)
+        else if(P[ii].Type == 4) {
+            for(int jj = 0; jj < fof->TotNgroups; jj++) {
+                if(P[ii].GrNr == all_grnr[jj]){
+                    fesc_temp = uvbg_params.EscapeFractionNorm
+                        * powf(all_halomass[jj]*fesc_unit_conv,uvbg_params.EscapeFractionScaling);
+                    if(fesc_temp > 1) fesc_temp = 1;
+                    if(fesc_temp < 0) endrun(1,"negative escape fraction?\n");
+                    STARP(ii).EscapeFraction = fesc_temp;
+                    break;
+                }
+            }
+            i_star = ii;
+        }
+    }
+    if(i_star>0){
+        message(1,"last star idx before petapm = %d, Type = %d, PI = %d\n",i_star,P[i_star].Type,P[i_star].PI);
+        message(1,"has fesc = %e\n",STARP(i_star).EscapeFraction);
+        size_t exp_idx = sizeof(StarP[0]) * P[i_star].PI + (char*) &StarP[0].EscapeFraction - (char*) StarP;
+        size_t exp_idx2 = sizeof(P[0]) * i_star + (char*) &P[0].PI - (char*) P;
+        message(1,"expected indices (PI,fesc): (%d, %d) \n",exp_idx2,exp_idx);
+    }
+
+    myfree(all_grnr);
+    myfree(all_halomass);
 }
 
 //TODO:split up into more functions
@@ -478,19 +612,23 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGrou
         NULL,
         PartManager->NumPart,
     };
-    PetaPMReionPartStruct = {
+    PetaPMReionPartStruct rstruct = {
         (char*) &P[0].Type  - (char*) P,
         (char*) &P[0].PI  - (char*) P,
-        (char*) &P[0].GrNr  - (char*) P,
         SphP,
         sizeof(SphP[0]),
         (char*) &SphP[0].Sfr  - (char*) SphP, //TODO: make sure you are using the right object here
-        fof->Group,
-        sizeof(fof->Group[0]),
-        (char*) &fof->Group[0].Mass - (char*) &fof->Group,
+        StarP,
+        sizeof(StarP[0]),
+        (char*) &StarP[0].EscapeFraction - (char*) StarP,
     };
+
+    message(1,"rsturct: \n type offset: %d \n pi offset: %d\n",rstruct.offset_type,rstruct.offset_pi);
+    message(1,"sph elsize: %d \n sfr offset: %d\n",rstruct.sph_elsize,rstruct.offset_sfr);
+    message(1,"star elsize: %d \n fesc offset: %d\n",rstruct.star_elsize,rstruct.offset_fesc);
+
     PetaPMGlobalFunctions global_functions = {NULL, NULL, divide_by_ncell};
-    
+
     //TODO: set this up with all the filtering/reion loops
     static PetaPMFunctions functions [] =
     {
@@ -498,17 +636,13 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGrou
         {NULL, NULL, NULL},
     };
 
-    //Reset local J21
-    for(int ii = 0; ii < PartManager->NumPart; ii++) {
-        if(P[ii].Type == 0) {
-            SPHP(ii).local_J21 = 0.;
-        }
-    }
-    
-    /* initialize J21 for grid and particles */
+    //set local J21 = 0 and set escape fractions for all particles
+    init_particle_uvbg(fof);
+
+    /* initialize grids */
     int grid_n = pm_mass->real_space_region.size[0] 
         * pm_mass->real_space_region.size[1] 
-        * * pm_mass->real_space_region.size[2];
+        * pm_mass->real_space_region.size[2];
 
     UVBGgrids.J21 = mymalloc("J21", sizeof(float) * grid_n);
     float * J21 = UVBGgrids.J21;
@@ -522,7 +656,8 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGrou
 
     message(0, "Away to call find_HII_bubbles...\n");
     petapm_reion(pm_mass,pm_star,pm_sfr,makeregion,&global_functions
-            ,functions,&pstruct,&rstruct,reion_loop_pm,Rmax,Rmin,Rdelta,NULL);
+            ,functions,&pstruct,&rstruct,reion_loop_pm,Rmax,Rmin,Rdelta
+            ,NULL);
 
     //TODO: a particle loop that detects new ionisations, saves J21_at_ion and z_at_ion
     //TODO: multiply J21_at_ion with halo bias??

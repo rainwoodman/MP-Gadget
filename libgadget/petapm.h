@@ -90,13 +90,12 @@ typedef struct {
 typedef struct {
     size_t offset_type; //offset in particle data to type
     size_t offset_pi; //offset in particle data to property index
-    size_t offset_grnr; //offset in particle data to fof group number
     void * Sphslot; //pointer to SPH slot
-    size_t sph_elsize //element size of SPH slot
+    size_t sph_elsize; //element size of SPH slot
     size_t offset_sfr; //offset in SPH slot to star formation rate
-    void* fof; //pointer to fof groups
-    size_t fof_elsize; //element size of fof group
-    size_t offset_fofmass; //offset in fof groups to fof mass
+    void* Starslot; //pointer to fof groups
+    size_t star_elsize; //element size of fof group
+    size_t offset_fesc; //offset in fof groups to fof mass
 } PetaPMReionPartStruct;
 
 typedef void (*petapm_transfer_func)(PetaPM * pm, int64_t k2, int kpos[3], pfft_complex * value);

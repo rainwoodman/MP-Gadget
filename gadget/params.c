@@ -341,7 +341,8 @@ create_gadget_parameter_set()
     param_declare_double(ps, "ReionGammaHaloBias", OPTIONAL, 2.0, "Halo Bias for calculating J21.");
     param_declare_double(ps, "ReionNionPhotPerBary", OPTIONAL, 4000., "Photons produced per stellar baryon.");
     param_declare_double(ps, "AlphaUV", OPTIONAL, 3., "Spectral slope of ionising radiation above the Hydrogen ionisation threshold.");
-    param_declare_double(ps, "EscapeFraction", OPTIONAL, 1., "Constant escape fraction of ionising photons from galaxies.");
+    param_declare_double(ps, "EscapeFractionNorm", OPTIONAL, 0.2, "Normalisation of escape fraction at 1e10 solar masses.");
+    param_declare_double(ps, "EscapeFractionScaling", OPTIONAL, 0.5, "Power law scaling of escape fraction with halo mass.");
     param_declare_double(ps, "UVBGTimestep", OPTIONAL, 10., "Time in Myr between UVBG calculations.");
     param_declare_string(ps, "J21CoeffFile", OPTIONAL, "", "Rate coefficient table for converting J21 to photo ion/heating rates at a certain spectral slope");
     param_declare_double(ps, "ExcursionSetZStop", OPTIONAL, 5., "Redshift at which we stop the excursion set and use global UVBG");

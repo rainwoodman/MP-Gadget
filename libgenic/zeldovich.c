@@ -160,10 +160,6 @@ void displacement_fields(PetaPM * pm, enum TransferType Type, struct ic_part_dat
         NULL,
         NULL,
         NumPart,
-        0, //no star info needed here
-        0, //no sfr info needed here
-        0, //no pi info needed here
-        NULL, //no SPHP needed here
     };
 
     int i;
