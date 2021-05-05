@@ -9,6 +9,7 @@ import bigfile as bf
 import numpy as np
 from matplotlib import pyplot as plt
 from os.path import exists
+from astropy import cosmology, constants as C, units as U
 
 ap = argparse.ArgumentParser("get_xgrids.py")
 ap.add_argument("bigfile", help='path to the MP-Gadget output directory')
@@ -43,6 +44,7 @@ for i, snap in enumerate(snapshot_list):
     #read in the particle file
     filename = f'{ns.bigfile}/PART_{snap:03d}/'
 
+
     if not exists(filename):
         snap_mask[i] = False
         continue
@@ -50,6 +52,8 @@ for i, snap in enumerate(snapshot_list):
     print('')
 
     fin = bf.File(filename)
+    
+    boxsize = fin['Header'].attrs['BoxSize']
 
     #we need gas mass, stellar mass, and neutral fraction
     data = bf.Dataset(fin["0/"], ['Mass', 'NeutralHydrogenFraction'])
@@ -93,6 +97,26 @@ for i, snap in enumerate(snapshot_list):
 #divide my total mass for mass-weighted neutral fraction
 gas_xhi /= gas_mass
 
+h = 0.7186
+Om0 = 0.2814
+Ob0 = 0.0464
+m_nu = [0., 0., 0.]*U.Unit('eV')
+Tcmb0 = 2.7255
+Ode0 = 0.7186
+
+cosmo = cosmology.FlatLambdaCDM(H0=h*100,Om0=Om0,Ob0=Ob0,Tcmb0=Tcmb0,m_nu=m_nu)
+
+#h adjustments
+boxsize = boxsize*U.Unit('kpc') / h
+
+critdens = cosmo.critical_density0
+
+dm_mass = (critdens * cosmo.Odm0 * boxsize**3).to('M_sun')
+b_mass = (critdens * cosmo.Ob0 * boxsize**3).to('M_sun')
+b_plot = b_mass.value
+
+print(b_plot)
+print(gas_mass * 10**10 / h)
 #multiply stellar mass by photons per stellar baryon
 #and take ratio with gas mass, giving an estimate of
 #total number of photons released per hydrogen atom
@@ -106,9 +130,9 @@ redshift_list = redshift_list[snap_mask]
 #plot the neutral fraction and photon ratio vs snapshot
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.plot(redshift_list, star_photons, label='stellar mass * Nion / gas mass (He)')
-ax.plot(redshift_list, star_photons*0.82, label='stellar photons / gas mass')
-ax.plot(redshift_list, star_photons/ns.fesc, label='stellar photons / gas mass (fesc=1)')
+ax.plot(redshift_list, star_photons, label='stellar photon ratio')
+ax.plot(redshift_list, star_photons*(1 - 0.75*Y_He), label='stellar photon ratio (no He)')
+ax.plot(redshift_list, star_photons/ns.fesc, label='stellar photons (fesc=1)')
 ax.plot(redshift_list, 1 - gas_xhi, label='ionised fraction')
 ax.set_ylim(0, 1)
 ax.legend()

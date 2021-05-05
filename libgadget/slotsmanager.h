@@ -71,7 +71,7 @@ struct star_particle_data
     MyFloat Metallicity;        /*!< Total metallicity of star particle */
     float Metals[NMETALS];      /* Metal mass of each species in star particle*/
 
-    float EscapeFraction; /* Escape fraction stored for reionisation calculation */
+    MyFloat EscapeFraction; /* Escape fraction stored for reionisation calculation */
 };
 
 /* the following structure holds data that is stored for each SPH particle in addition to the collisionless

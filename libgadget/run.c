@@ -484,11 +484,6 @@ run(int RestartSnapNum)
             fof_save_groups(&fof, SnapshotFileCount, MPI_COMM_WORLD);
             fof_finish(&fof);
         }
-        
-        if(All.ExcursionSetReionOn){
-            if(CalcUVBG) {
-            }
-        }
 
         write_cpu_log(NumCurrentTiStep, FdCPU);    /* produce some CPU usage info */
 

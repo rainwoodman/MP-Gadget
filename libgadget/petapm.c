@@ -65,7 +65,7 @@ static PetaPMReionPartStruct * CPS_R; /* stored by petapm_force, how to access o
 /* (jdavies) reion defs */
 #define TYPE(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_type]))
 #define PI(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_pi]))
-#define FESC(i) ((float*) (&((char*)CPS_R->Starslot)[CPS_R->star_elsize * *PI(i) + CPS_R->offset_fesc]))
+#define FESC(i) ((double*) (&((char*)CPS_R->Starslot)[CPS_R->star_elsize * *PI(i) + CPS_R->offset_fesc]))
 /*TODO: this is a MyFloat, also not currently used and possibly broken*/
 #define SFR(i) ((double*)  (&((char*)CPS_R->Sphslot)[CPS_R->sph_elsize * *PI(i) + CPS_R->offset_sfr]))
 
@@ -1144,7 +1144,7 @@ static void put_star_to_mesh(PetaPM * pm, int i, double * mesh, double weight) {
     if(INACTIVE(i) || *TYPE(i) != 4)
         return;
     double Mass = *MASS(i);
-    float fesc = *FESC(i);
+    double fesc = *FESC(i);
 #pragma omp atomic update
     mesh[0] += weight * Mass * fesc;
 }
@@ -1153,7 +1153,8 @@ static void put_sfr_to_mesh(PetaPM * pm, int i, double * mesh, double weight) {
     if(INACTIVE(i) || *TYPE(i) != 0)
         return;
     double Sfr = *SFR(i);
-    float fesc = *FESC(i);
+    double fesc = 1.;
+    //double fesc = *FESC(i);
 #pragma omp atomic update
     mesh[0] += weight * Sfr * fesc;
 }

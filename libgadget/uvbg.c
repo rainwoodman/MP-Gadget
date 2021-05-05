@@ -264,17 +264,21 @@ static void print_reion_debug_info(PetaPM * pm_mass, float * J21, float * xHI, d
     double max_star = 0;
     double min_sfr = 1e30;
     double max_sfr = 0;
+    double total_star = 0;
+    double total_mass = 0;
     int neutral_count = 0;
     int ion_count = 0;
     int pm_idx;
     int uvbg_dim = All.UVBGdim;
     int grid_n_real = uvbg_dim * uvbg_dim * uvbg_dim;
-#pragma omp parallel for collapse(3) reduction(+:neutral_count,ion_count) reduction(min:min_J21,min_mass,min_star,min_sfr) reduction(max:max_J21,max_mass,max_star,max_sfr) private(pm_idx)
+#pragma omp parallel for collapse(3) reduction(+:neutral_count,ion_count,total_mass,total_star) reduction(min:min_J21,min_mass,min_star,min_sfr) reduction(max:max_J21,max_mass,max_star,max_sfr) private(pm_idx)
     for (int ix = 0; ix < pm_mass->real_space_region.size[0]; ix++)
         for (int iy = 0; iy < pm_mass->real_space_region.size[1]; iy++)
             for (int iz = 0; iz < pm_mass->real_space_region.size[2]; iz++) {
                 pm_idx = grid_index(ix, iy, iz, pm_mass->real_space_region.strides);
 
+                total_mass += mass_real[pm_idx];
+                total_star += star_real[pm_idx];
                 if(xHI[pm_idx] > 1 - FLOAT_REL_TOL)
                     neutral_count += 1;
                 if(xHI[pm_idx] < FLOAT_REL_TOL)
@@ -289,6 +293,8 @@ static void print_reion_debug_info(PetaPM * pm_mass, float * J21, float * xHI, d
                 max_sfr = max_sfr > sfr_real[pm_idx] ? max_sfr : sfr_real[pm_idx];
 
             }
+
+    message(1,"rank total mass : %e | rank total star : %e\n",total_mass,total_star);
     MPI_Allreduce(MPI_IN_PLACE, &neutral_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &ion_count, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &min_J21, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
@@ -299,13 +305,15 @@ static void print_reion_debug_info(PetaPM * pm_mass, float * J21, float * xHI, d
     MPI_Allreduce(MPI_IN_PLACE, &max_star, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &min_sfr, 1, MPI_DOUBLE, MPI_MIN, MPI_COMM_WORLD);
     MPI_Allreduce(MPI_IN_PLACE, &max_sfr, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &total_mass, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Allreduce(MPI_IN_PLACE, &total_star, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     double n_ratio = (double)neutral_count / (double)grid_n_real;
     double i_ratio = (double)ion_count / (double)grid_n_real;
     
     message(0,"neutral cells : %d, ion cells %d, ratio(%d) N %f ion %f\n",neutral_count, ion_count, grid_n_real, n_ratio, i_ratio);
     message(0,"min J21 : %e | max J21 %e\n",min_J21,max_J21);
-    message(0,"min mass : %e | max mass %e\n",min_mass,max_mass);
-    message(0,"min star : %e | max star %e\n",min_star,max_star);
+    message(0,"min mass : %e | max mass : %e | total mass %e\n",min_mass,max_mass,total_mass);
+    message(0,"min star : %e | max star %e | total star : %e\n",min_star,max_star,total_star);
     message(0,"min sfr : %e | max sfr %e\n",min_sfr,max_sfr);
 }
 
@@ -354,7 +362,7 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
                 pm_idx = grid_index(ix, iy, iz, pm_mass->real_space_region.strides);
                 mass_real[pm_idx] = fmax(mass_real[pm_idx], 0.0);
                 star_real[pm_idx] = fmax(star_real[pm_idx], 0.0);
-                //sfr_real[pm_idx] = fmax(sfr_real[pm_idx], 0.0);
+                sfr_real[pm_idx] = fmax(sfr_real[pm_idx], 0.0);
             }
 
     const double J21_aux_constant = (1.0 + redshift) * (1.0 + redshift) / (4.0 * M_PI)
@@ -415,7 +423,6 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     if(last_step){
 
 #ifdef DEBUG
-        message(1,"printing info c2r\n");
         print_reion_debug_info(pm_mass,J21,xHI,mass_real,star_real,sfr_real);
 #endif
 
@@ -556,22 +563,28 @@ void init_particle_uvbg(FOFGroups * fof){
     /* Assign FOF masses to particles in this loop OR have good way to index communicated arrays */
     //need to convert halo mass to 1e10 solar
     double fesc_unit_conv = All.UnitMass_in_g / SOLAR_MASS / 1e10 / All.CP.HubbleParam;
-    float fesc_temp;
+    double fesc_temp;
+
+    double total_mass = 0;
+    double total_star = 0;
     
     //Reset local J21
     int i_star = -10;
-#pragma omp parallel for
+#pragma omp parallel for reduction(+:total_mass,total_star) private(fesc_temp)
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
+        total_mass += P[ii].Mass;
         if(P[ii].Type == 0) {
             SPHP(ii).local_J21 = 0.;
         }
         //Assign escape fractions to star particles
         //TODO: this is O(stars*fofgroups)
         else if(P[ii].Type == 4) {
+            STARP(ii).EscapeFraction = 0;
+            total_star += P[ii].Mass;
             for(int jj = 0; jj < fof->TotNgroups; jj++) {
                 if(P[ii].GrNr == all_grnr[jj]){
                     fesc_temp = uvbg_params.EscapeFractionNorm
-                        * powf(all_halomass[jj]*fesc_unit_conv,uvbg_params.EscapeFractionScaling);
+                        * pow(all_halomass[jj]*fesc_unit_conv,uvbg_params.EscapeFractionScaling);
                     if(fesc_temp > 1) fesc_temp = 1;
                     if(fesc_temp < 0) endrun(1,"negative escape fraction?\n");
                     STARP(ii).EscapeFraction = fesc_temp;
@@ -588,6 +601,7 @@ void init_particle_uvbg(FOFGroups * fof){
         size_t exp_idx2 = sizeof(P[0]) * i_star + (char*) &P[0].PI - (char*) P;
         message(1,"expected indices (PI,fesc): (%d, %d) \n",exp_idx2,exp_idx);
     }
+    message(1,"expected total mass = %e, total star = %e\n",total_mass,total_star);
 
     myfree(all_grnr);
     myfree(all_halomass);
