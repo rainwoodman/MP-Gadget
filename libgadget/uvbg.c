@@ -565,14 +565,10 @@ void init_particle_uvbg(FOFGroups * fof){
     double fesc_unit_conv = All.UnitMass_in_g / SOLAR_MASS / 1e10 / All.CP.HubbleParam;
     double fesc_temp;
 
-    double total_mass = 0;
-    double total_star = 0;
-    
     //Reset local J21
     int i_star = -10;
 #pragma omp parallel for reduction(+:total_mass,total_star) private(fesc_temp)
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
-        total_mass += P[ii].Mass;
         if(P[ii].Type == 0) {
             SPHP(ii).local_J21 = 0.;
         }
@@ -580,7 +576,6 @@ void init_particle_uvbg(FOFGroups * fof){
         //TODO: this is O(stars*fofgroups)
         else if(P[ii].Type == 4) {
             STARP(ii).EscapeFraction = 0;
-            total_star += P[ii].Mass;
             for(int jj = 0; jj < fof->TotNgroups; jj++) {
                 if(P[ii].GrNr == all_grnr[jj]){
                     fesc_temp = uvbg_params.EscapeFractionNorm
@@ -591,18 +586,8 @@ void init_particle_uvbg(FOFGroups * fof){
                     break;
                 }
             }
-            i_star = ii;
         }
     }
-    if(i_star>0){
-        message(1,"last star idx before petapm = %d, Type = %d, PI = %d\n",i_star,P[i_star].Type,P[i_star].PI);
-        message(1,"has fesc = %e\n",STARP(i_star).EscapeFraction);
-        size_t exp_idx = sizeof(StarP[0]) * P[i_star].PI + (char*) &StarP[0].EscapeFraction - (char*) StarP;
-        size_t exp_idx2 = sizeof(P[0]) * i_star + (char*) &P[0].PI - (char*) P;
-        message(1,"expected indices (PI,fesc): (%d, %d) \n",exp_idx2,exp_idx);
-    }
-    message(1,"expected total mass = %e, total star = %e\n",total_mass,total_star);
-
     myfree(all_grnr);
     myfree(all_halomass);
 }
@@ -636,10 +621,6 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGrou
         sizeof(StarP[0]),
         (char*) &StarP[0].EscapeFraction - (char*) StarP,
     };
-
-    message(1,"rsturct: \n type offset: %d \n pi offset: %d\n",rstruct.offset_type,rstruct.offset_pi);
-    message(1,"sph elsize: %d \n sfr offset: %d\n",rstruct.sph_elsize,rstruct.offset_sfr);
-    message(1,"star elsize: %d \n fesc offset: %d\n",rstruct.star_elsize,rstruct.offset_fesc);
 
     PetaPMGlobalFunctions global_functions = {NULL, NULL, divide_by_ncell};
 

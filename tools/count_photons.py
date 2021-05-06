@@ -130,9 +130,8 @@ redshift_list = redshift_list[snap_mask]
 #plot the neutral fraction and photon ratio vs snapshot
 fig = plt.figure()
 ax = fig.add_subplot(111)
-ax.plot(redshift_list, star_photons, label='stellar photon ratio')
-ax.plot(redshift_list, star_photons*(1 - 0.75*Y_He), label='stellar photon ratio (no He)')
-ax.plot(redshift_list, star_photons/ns.fesc, label='stellar photons (fesc=1)')
+ax.plot(redshift_list, star_photons, label=f'stellar photons (flat fesc={ns.fesc})')
+ax.plot(redshift_list, star_photons/ns.fesc, label='stellar photons (flat fesc=1)')
 ax.plot(redshift_list, 1 - gas_xhi, label='ionised fraction')
 ax.set_ylim(0, 1)
 ax.legend()

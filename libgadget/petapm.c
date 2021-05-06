@@ -515,23 +515,6 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     CPS = pstruct;
     CPS_R = rstruct;
     
-    int i_star = -10;
-    for(int ii = CPS->NumPart; ii >= 0; ii --) {
-        if(*TYPE(ii) == 4) {
-            i_star = ii;
-            break;
-        }
-    }
-   
-    if(i_star > 0) {
-        //#define PI(i) ((int*)  (&((char*)CPS->Parts)[CPS->elsize * (i) + CPS_R->offset_pi]))
-        message(1,"last star idx inside petapm = %d, Type = %d, PI = %d\n",i_star,*TYPE(i_star),*PI(i_star));
-        message(1,"has fesc = %e\n",*FESC(i_star));
-        message(1,"total indices (PI,fesc) = (%d, %d)\n"
-                ,CPS->elsize * (i_star) + CPS_R->offset_pi
-                , CPS_R->star_elsize * *PI(i_star) + CPS_R->offset_fesc);
-    }
-
     /* initialise regions for each grid
      * NOTE: these regions should be identical except for the grid buffer */
     int Nregions_mass, Nregions_star, Nregions_sfr;
@@ -546,7 +529,6 @@ void petapm_reion(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
     pfft_complex * star_unfiltered = petapm_force_r2c(pm_star, global_functions);
     pfft_complex * sfr_unfiltered = petapm_force_r2c(pm_sfr, global_functions);
 
-    message(1,"starting c2r\n");
     //need custom reion_c2r to implement the 3 grid c2r and readout
     //the readout is only performed on the mass grid so for now I only pass in regions/Nregions for mass
     if(functions)
