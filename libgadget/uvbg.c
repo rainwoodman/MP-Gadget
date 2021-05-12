@@ -108,27 +108,6 @@ void save_uvbg_grids(int SnapshotFileCount, PetaPM * pm)
     MPI_Comm_size(MPI_COMM_WORLD, &n_ranks);
     MPI_Comm_rank(MPI_COMM_WORLD, &this_rank);
 
-    int xhi_neutral=0;
-    int xhi_ionised=0;
-    int j_gtz=0;
-
-    //print some debug stats
-    for(int ii=0;ii<grid_n;ii++)
-    {
-        if(UVBGgrids.J21[ii] > FLOAT_REL_TOL)
-            j_gtz++;
-        if(UVBGgrids.xHI[ii] < FLOAT_REL_TOL)
-            xhi_neutral++;
-        if(UVBGgrids.xHI[ii] > (1 - FLOAT_REL_TOL))
-            xhi_ionised++;
-    }
-    MPI_Allreduce(MPI_IN_PLACE, &xhi_neutral, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &xhi_ionised, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-    MPI_Allreduce(MPI_IN_PLACE, &j_gtz, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
-
-    message(0,"J21 grid has %d nonzero cells out of %d total cells \n",j_gtz,grid_n);
-    message(0,"XHI grid has %d fully neutral cells and %d fully ionised cells \n",xhi_neutral,xhi_ionised);
-
     //TODO(jdavies): finish this grid writing function
     BigFile fout;
     char fname[256];
@@ -566,8 +545,7 @@ void init_particle_uvbg(FOFGroups * fof){
     double fesc_temp;
 
     //Reset local J21
-    int i_star = -10;
-#pragma omp parallel for reduction(+:total_mass,total_star) private(fesc_temp)
+#pragma omp parallel for private(fesc_temp)
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if(P[ii].Type == 0) {
             SPHP(ii).local_J21 = 0.;
@@ -660,15 +638,14 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGrou
     walltime_measure("/UVBG/find_HII_bubbles");
 
     //since J21 is output to particles, we should only need to write these grids for debugging
-    //This function is currently WIP
-    //TODO: test the new grid-saving before including it in debug
-#if 0
+#ifdef DEBUG
     if(WriteSnapshot) {
-        save_uvbg_grids(SnapshotFileCount,&pm_mass);
+        save_uvbg_grids(SnapshotFileCount,pm_mass);
         message(0,"uvbg saved\n");
     }
     walltime_measure("/UVBG/save");
 #endif
+
     myfree(UVBGgrids.xHI);
     myfree(UVBGgrids.J21);
    
