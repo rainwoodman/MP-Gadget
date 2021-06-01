@@ -15,7 +15,7 @@
 #include <ctype.h>
 #include <bigfile.h>
 #include <bigfile-mpi.h>
-#include <complex.h>
+//#include <complex.h>
 #include <stdbool.h>
 #include <assert.h>
 
@@ -119,8 +119,6 @@ void save_uvbg_grids(int SnapshotFileCount, PetaPM * pm)
                     big_file_get_error_message());
     }
 
-    big_file_mpi_create(&fout, fname, MPI_COMM_WORLD);
-
     BigBlock bh;
     if(0 != big_file_mpi_create_block(&fout, &bh, "Header", NULL, 0, 0, 0, MPI_COMM_WORLD)) {
         endrun(0, "Failed to create block at %s:%s\n", "Header",
@@ -145,15 +143,15 @@ void save_uvbg_grids(int SnapshotFileCount, PetaPM * pm)
 
     //J21 block
     BigArray arr = {0};
-    big_array_init(&arr, UVBGgrids.J21, "=f4", 1, (size_t[]){grid_n}, NULL);
-    petaio_save_block(&fout,"J21",&arr,0);
+    big_array_init(&arr, UVBGgrids.J21, "=f4", 2, (size_t[]){grid_n,1}, NULL);
+    petaio_save_block(&fout,"J21",&arr,1);
 
     message(0,"saved J21\n");
 
     //xHI block
     BigArray arr2 = {0};
-    big_array_init(&arr2, UVBGgrids.xHI, "=f4", 1, (size_t[]){grid_n}, NULL);
-    petaio_save_block(&fout,"XHI",&arr2,0);
+    big_array_init(&arr2, UVBGgrids.xHI, "=f4", 2, (size_t[]){grid_n,1}, NULL);
+    petaio_save_block(&fout,"XHI",&arr2,1);
 
     message(0,"saved XHI\n");
 
@@ -198,7 +196,8 @@ static PetaPMRegion * makeregion(PetaPM * pm, PetaPMParticleStruct * pstruct, vo
 //this is applied as global_transfer, dividing by n_cells due to the forward-reverse FFT
 static void divide_by_ncell(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value){
         int total_n_cells = (double)(All.UVBGdim * All.UVBGdim * All.UVBGdim);
-        *value /= total_n_cells;
+        value[0][0] /= total_n_cells;
+        value[0][1] /= total_n_cells;
 }
 
 //transfer functions that applies a certain filter (top-hat or gaussian)
@@ -211,19 +210,24 @@ static void filter_pm(PetaPM * pm, int64_t k2, int k[3], pfft_complex * value)
 
     switch (filter_type) {
     case 0: // Real space top-hat
-        if (kR > 1e-4)
-            *value *= (pfft_complex)(3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
+        if (kR > 1e-4){
+            value[0][0] *= (3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
+            value[0][1] *= (3.0 * (sinf(kR) / powf(kR, 3) - cosf(kR) / powf(kR, 2)));
+        }
         break;
 
     case 1: // k-space top hat
         kR *= 0.413566994; // Equates integrated volume to the real space top-hat (9pi/2)^(-1/3)
-        if (kR > 1)
-            *value = (pfft_complex)0.0;
+        if (kR > 1){
+            value[0][0] = 0.0;
+            value[0][1] = 0.0;
+        }
         break;
 
     case 2: // Gaussian
         kR *= 0.643; // Equates integrated volume to the real space top-hat
-        *value *= (pfft_complex)(pow(M_E,(-kR * kR / 2.0)));
+        value[0][0] *= (pow(M_E,(-kR * kR / 2.0)));
+        value[0][1] *= (pow(M_E,(-kR * kR / 2.0)));
         break;
 
     default:
@@ -446,132 +450,34 @@ static void readout_J21(PetaPM * pm, int i, double * mesh, double weight) {
         SPHP(i).local_J21 += weight * mesh[0];
     //TODO: add heating here (see qso code) by adding to entropy
 }
-
-#if 0
-/* TODO: finish this for more effeicient memory usage */
-static int uvbg_treefind(TreeWalkQueryBase * I,
-                        TreeWalkNgbIterBase * iter,
-                        int startnode,
-                        LocalTreeWalk * lv)
-{
-    int no;
-    int numcand = 0;
-    
-    const ForceTree * tree = lv->tw->tree;
-    const double BoxSize = tree->BoxSize;
-    
-    no = startnode;
-    
-    while(no >= 0)
-    {
-        struct NODE *current = &tree->Nodes[no];
-        
-        /* When walking exported particles we start from the
-        * encompassing top-level node,
-        * so if we get back to a top-level node again we are done.*/
-        /* The first node is always top-level*/
-        if(current->f.TopLevel && !current->f.InternalTopLevel) {
-            /* Code that adds the relevant task to a list of tasks
-            * for this FOF halo*/
-            no = current->sibling;
-            continue;
-        }
-
-        /* Cull the node: use iter->Hsml as the (or 1.5x) virial radius
-        * of the halo so that includes all halo particles. */
-        if(0 == cull_node(I, iter, current, BoxSize)) {
-            /* in case the node can be discarded */
-            no = current->sibling;
-            continue;
-        }
-    
-    /* ok, we need to open the node */
-    no = current->s.suns[0];
-    }
-
-    return numcand;
-}
-#endif
-
 /* sets particle properties needed for the Excursion Set */
-void init_particle_uvbg(FOFGroups * fof){
-
-    double * all_halomass = mymalloc("all_halomass",sizeof(double) * fof->TotNgroups);
-    int * all_grnr = mymalloc("all_grnr",sizeof(int) * fof->TotNgroups);
-
-    double * local_halomass = mymalloc("local_halomass",sizeof(double) * fof->Ngroups);
-    int * local_grnr = mymalloc("local_grnr",sizeof(int) * fof->Ngroups);
-
-    /* Fill local FOF mass arrays */
-    for (int ii=0;ii<fof->Ngroups;ii++)
-    {
-        local_halomass[ii] = fof->Group[ii].Mass;
-        local_grnr[ii] = fof->Group[ii].base.GrNr;
-    }
-    
-    /* Do Treewalk to get list of tasks per FOFGroup */
-    //uvbg_treefind(fof,task_array,tree);
-    /* Distribute FOF mass arrays to appropriate tasks */
-    //TODO: don't just allgather for big runs
-    int j,NTask, ThisTask;
-    int ngr;
-    MPI_Comm_size(MPI_COMM_WORLD, &NTask);
-    MPI_Comm_rank(MPI_COMM_WORLD, &ThisTask);
-    
-    ngr = fof->Ngroups;
-    int * ngra = mymalloc("NGRA", sizeof(int) * NTask);
-    int * offseta = mymalloc("OFFA", sizeof(int) * NTask);
-
-    MPI_Allgather(&ngr, 1, MPI_INT, ngra, 1, MPI_INT, MPI_COMM_WORLD);
-
-    int offset = 0;
-    for(j = 0; j < NTask; j++){
-        offseta[j] = offset;
-        offset += ngra[j];
-    }
-    
-    MPI_Allgatherv(local_halomass,fof->Ngroups,MPI_DOUBLE,all_halomass,ngra,offseta,MPI_DOUBLE,MPI_COMM_WORLD);
-    MPI_Allgatherv(local_grnr,fof->Ngroups,MPI_INT,all_grnr,ngra,offseta,MPI_INT,MPI_COMM_WORLD);
-    
-    myfree(offseta);
-    myfree(ngra);
-
-    myfree(local_grnr);
-    myfree(local_halomass);
-
-    /* Assign FOF masses to particles in this loop OR have good way to index communicated arrays */
-    //need to convert halo mass to 1e10 solar
+static void init_particle_uvbg(){
+    /* need to convert halo mass to 1e10 solar */
     double fesc_unit_conv = All.UnitMass_in_g / SOLAR_MASS / 1e10 / All.CP.HubbleParam;
     double fesc_temp;
 
-    //Reset local J21
+    /* Reset local J21 */
 #pragma omp parallel for private(fesc_temp)
     for(int ii = 0; ii < PartManager->NumPart; ii++) {
         if(P[ii].Type == 0) {
             SPHP(ii).local_J21 = 0.;
         }
-        //Assign escape fractions to star particles
-        //TODO: this is O(stars*fofgroups)
+        /* Assign escape fractions to star particles */
         else if(P[ii].Type == 4) {
-            STARP(ii).EscapeFraction = 0;
-            for(int jj = 0; jj < fof->TotNgroups; jj++) {
-                if(P[ii].GrNr == all_grnr[jj]){
-                    fesc_temp = uvbg_params.EscapeFractionNorm
-                        * pow(all_halomass[jj]*fesc_unit_conv,uvbg_params.EscapeFractionScaling);
-                    if(fesc_temp > 1) fesc_temp = 1;
-                    if(fesc_temp < 0) endrun(1,"negative escape fraction?\n");
-                    STARP(ii).EscapeFraction = fesc_temp;
-                    break;
-                }
-            }
+            if(STARP(ii).EscapeFraction == 0) continue;
+
+            fesc_temp = uvbg_params.EscapeFractionNorm * pow(STARP(ii).EscapeFraction 
+                    * fesc_unit_conv, uvbg_params.EscapeFractionScaling);
+
+            if(fesc_temp > 1) fesc_temp = 1;
+            if(fesc_temp < 0) endrun(1,"negative escape fraction?\n");
+            STARP(ii).EscapeFraction = fesc_temp;
         }
     }
-    myfree(all_grnr);
-    myfree(all_halomass);
 }
 
 //TODO:split up into more functions
-void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGroups * fof, int WriteSnapshot, int SnapshotFileCount){
+void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, int WriteSnapshot, int SnapshotFileCount){
     //setup filter radius range
     double Rmax = uvbg_params.ReionRBubbleMax;
     double Rmin = uvbg_params.ReionRBubbleMin;
@@ -610,7 +516,7 @@ void calculate_uvbg(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr, FOFGrou
     };
 
     //set local J21 = 0 and set escape fractions for all particles
-    init_particle_uvbg(fof);
+    init_particle_uvbg();
 
     /* initialize grids */
     int grid_n = pm_mass->real_space_region.size[0] 

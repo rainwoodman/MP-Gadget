@@ -184,6 +184,9 @@ int treewalk_visit_ngbiter(TreeWalkQueryBase * I,
             TreeWalkResultBase * O,
             LocalTreeWalk * lv);
 
+/* used in uvbg.c to find particles in fof groups */
+//int cull_node(const TreeWalkQueryBase * const I, const TreeWalkNgbIterBase * const iter, const struct NODE * const current, const double BoxSize);
+
 /*returns -1 if the buffer is full */
 int treewalk_export_particle(LocalTreeWalk * lv, int no);
 #define TREEWALK_REDUCE(A, B) (A) = (mode==TREEWALK_PRIMARY)?(B):((A) + (B))
