@@ -15,7 +15,6 @@
 #include <ctype.h>
 #include <bigfile.h>
 #include <bigfile-mpi.h>
-//#include <complex.h>
 #include <stdbool.h>
 #include <assert.h>
 
@@ -29,8 +28,6 @@
 #include "physconst.h"
 #include "walltime.h"
 #include "petaio.h"
-#include "fof.h"
-//#include "treewalk.h"
 
 // TODO(smutch): See if something equivalent is defined anywhere else
 #define FLOAT_REL_TOL (float)1e-5
