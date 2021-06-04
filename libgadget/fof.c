@@ -802,15 +802,16 @@ fof_alloc_group(const struct BaseGroup * base, const int NgroupsExt)
 }
 
 /* TODO: It would be a good idea to generalise this to arbitrary fof/particle properties */
-static void fof_set_escapefraction(struct FOFGroups * fof)
+static void fof_set_escapefraction(struct FOFGroups * fof, const int NgroupsExt)
 {
+    int i = 0;
     for(i = 0; i < PartManager->NumPart; i++){
         if(P[i].Type == 4){
             STARP(i).EscapeFraction = 0.;	/* will mark particles that are not in any group */
         }
     }
 
-    start = 0;
+    int start = 0;
     for(i = 0; i < NgroupsExt; i++)
     {
         /* find the first particle */
@@ -882,7 +883,7 @@ fof_compile_catalogue(struct FOFGroups * fof, const int NgroupsExt, double BoxSi
 
     /* feed group property back to each particle. */
     /* TODO: put a flag here to only run if we need it */
-    fof_set_escapefraction(fof);
+    fof_set_escapefraction(fof, NgroupsExt);
 
     int64_t TotNids;
     sumup_large_ints(1, &fof->Ngroups, &fof->TotNgroups);
