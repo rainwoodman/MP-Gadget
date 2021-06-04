@@ -801,6 +801,42 @@ fof_alloc_group(const struct BaseGroup * base, const int NgroupsExt)
     return Group;
 }
 
+/* TODO: It would be a good idea to generalise this to arbitrary fof/particle properties */
+static void fof_set_escapefraction(struct FOFGroups * fof)
+{
+    for(i = 0; i < PartManager->NumPart; i++){
+        if(P[i].Type == 4){
+            STARP(i).EscapeFraction = 0.;	/* will mark particles that are not in any group */
+        }
+    }
+
+    start = 0;
+    for(i = 0; i < NgroupsExt; i++)
+    {
+        /* find the first particle */
+        for(;start < PartManager->NumPart; start++) {
+            if(HaloLabel[start].MinID >= fof->Group[i].base.MinID) break;
+        }
+        /* add particles */
+        for(;start < PartManager->NumPart; start++) {
+            if(HaloLabel[start].MinID != fof->Group[i].base.MinID) {
+                break;
+            }
+            int pi = HaloLabel[start].Pindex;
+
+            if(P[pi].GrNr != fof->Group[i].base.GrNr) {
+                endrun(3333, "GrNr mismatch\n");
+            }
+
+            /* only do stars */
+            if(P[pi].Type != 4) continue;
+
+            /* putting halo mass in escape fraction for now, converted before uvbg calculation */ 
+            STARP(pi).EscapeFraction = fof->Group[i].Mass;
+        }
+    }
+}
+
 static void
 fof_compile_catalogue(struct FOFGroups * fof, const int NgroupsExt, double BoxSize, MPI_Comm Comm)
 {
@@ -845,40 +881,8 @@ fof_compile_catalogue(struct FOFGroups * fof, const int NgroupsExt, double BoxSi
     fof_finish_group_properties(fof, BoxSize);
 
     /* feed group property back to each particle. */
-    /* TODO: put the reionisation flag here somehow 
-     * we only need this before an excursion set is run every 10Myr*/
-    for(i = 0; i < PartManager->NumPart; i++){
-        if(P[i].Type == 4){
-            STARP(i).EscapeFraction = 0.;	/* will mark particles that are not in any group */
-        }
-    }
-
-    start = 0;
-    for(i = 0; i < NgroupsExt; i++)
-    {
-        /* find the first particle */
-        for(;start < PartManager->NumPart; start++) {
-            if(HaloLabel[start].MinID >= fof->Group[i].base.MinID) break;
-        }
-        /* add particles */
-        for(;start < PartManager->NumPart; start++) {
-            if(HaloLabel[start].MinID != fof->Group[i].base.MinID) {
-                break;
-            }
-            int pi = HaloLabel[start].Pindex;
-
-            if(P[pi].GrNr != fof->Group[i].base.GrNr) {
-                endrun(3333, "GrNr mismatch\n");
-            }
-
-            /* only do stars */
-            if(P[pi].Type != 4) continue;
-
-            /* putting halo mass in escape fraction for now, converted before uvbg calculation */ 
-            STARP(pi).EscapeFraction = fof->Group[i].Mass;
-        }
-    }
-    /* End reionisation part */
+    /* TODO: put a flag here to only run if we need it */
+    fof_set_escapefraction(fof);
 
     int64_t TotNids;
     sumup_large_ints(1, &fof->Ngroups, &fof->TotNgroups);
