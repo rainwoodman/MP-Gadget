@@ -149,6 +149,7 @@ ax.plot(redshift_list, fof_photons, label=f'stellar photons (fn = {ns.fesc_n}, f
 ax.plot(redshift_list, star_photons/ns.fesc_n, label='stellar photons (flat fesc=1)')
 ax.plot(redshift_list, 1 - gas_xhi, label='ionised fraction')
 ax.set_ylim(0, 1)
+ax.set_xlim(5,12)
 ax.legend()
 ax.set_xlabel('snapshot')
 ax.set_ylabel('ratio')

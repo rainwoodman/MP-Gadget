@@ -455,12 +455,8 @@ double get_neutral_fraction_sfreff(double redshift, struct particle_data * partd
     if(!All.CoolingOn)
         return 1;
     double nh0;
-<<<<<<< HEAD
     struct UVBG GlobalUVBG = get_global_UVBG(redshift);
-    struct UVBG uvbg = get_local_UVBG(redshift, &GlobalUVBG, partdata->Pos, PartManager->CurrentParticleOffset, partdata->HeIIIionized, sphdata->local_J21);
-=======
-    struct UVBG uvbg = get_local_UVBG(redshift, partdata->Pos, PartManager->CurrentParticleOffset, sphdata->local_J21);
->>>>>>> stop excursion set before helium ion
+    struct UVBG uvbg = get_local_UVBG(redshift, &GlobalUVBG, partdata->Pos, PartManager->CurrentParticleOffset, sphdata->local_J21);
     double physdens = sphdata->Density * All.cf.a3inv;
 
     if(!All.StarformationOn || sfr_params.QuickLymanAlphaProbability > 0 || !sfreff_on_eeqos(sphdata, All.cf.a3inv)) {

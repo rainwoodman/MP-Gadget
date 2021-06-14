@@ -145,7 +145,7 @@ init_uvf_table(const char * UVFluctuationFile, const double BoxSize, const doubl
  * Otherwise returns the global UVBG passed in.
  *
  * */
-struct UVBG _get_local_UVBG_from_global(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset)
+static struct UVBG get_local_UVBG_from_global(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset)
 {
     if(!UVF.enabled) {
         /* directly use the TREECOOL table if UVF is disabled */
@@ -235,7 +235,7 @@ static struct UVBG get_local_UVBG_from_J21(double redshift, double J21) {
 /*TODO: there are a few continuity issues to consider fixing.
  * if the z_reion tables provided finish after ExcursionSetZStop, particles could rapidly recombine.
  * I'm not sure how initial heating from reionisation (see D'Aloisio et al. 2019) is handled here */
-struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, double * Pos, const double * PosOffset, double J21)
+struct UVBG get_local_UVBG(double redshift, const struct UVBG * const GlobalUVBG, const double * const Pos, const double * const PosOffset, double J21)
 {
     if(All.ExcursionSetReionOn && (redshift > All.ExcursionSetZStop))
     {

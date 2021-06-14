@@ -259,8 +259,6 @@ void petaio_read_internal(char * fname, int ic, struct IOTable * IOTable, MPI_Co
     particle_alloc_memory(MaxPart);
 
     int64_t NLocal[6];
-
-    int NLocal[6];
     for(ptype = 0; ptype < 6; ptype ++) {
         int64_t start = ThisTask * NTotal[ptype] / NTask;
         int64_t end = (ThisTask + 1) * NTotal[ptype] / NTask;
