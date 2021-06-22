@@ -369,8 +369,8 @@ static void reion_loop_pm(PetaPM * pm_mass, PetaPM * pm_star, PetaPM * pm_sfr,
 
                 //TODO(jdavies): NOT THE ACTUAL SFR DENSITY, the rates functions don't work well with the bursty sfr
                 //this is total cumulative sfr smoothed over hubble time
-                sfr_density = star_real[pm_idx] / hubble_time / pixel_volume; // In internal units
-                //sfr_density = sfr_real[pm_idx] / pixel_volume / (All.UnitMass_in_g / SOLAR_MASS) * (All.UnitTime_in_s / SEC_PER_YEAR); // In internal units
+                //sfr_density = star_real[pm_idx] / hubble_time / pixel_volume; // In internal units
+                sfr_density = sfr_real[pm_idx] / pixel_volume / (All.UnitMass_in_g / SOLAR_MASS) * (All.UnitTime_in_s / SEC_PER_YEAR); // In internal units
 
                 const float J21_aux = (float)(sfr_density * J21_aux_constant);
 
