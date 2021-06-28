@@ -641,8 +641,7 @@ winds_make_after_sf(int i, double sm, double atime)
     if(!HAS(wind_params.WindModel, WIND_SUBGRID) || !winds_ever_decouple())
         return 0;
     /* Here comes the Springel Hernquist 03 wind model */
-    /* Notice that this is the mass of the gas particle after forking a star, 1/GENERATIONS
-        * what it was before.*/
+    /* Notice that this is the mass of the gas particle after forking a star, Mass - Mass/GENERATIONS.*/
     double pw = wind_params.WindEfficiency * sm / P[i].Mass;
     double prob = 1 - exp(-pw);
     if(get_random_number(P[i].ID + 2) < prob) {

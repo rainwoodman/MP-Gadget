@@ -246,7 +246,8 @@ create_gadget_parameter_set()
     };
 
     static ParameterEnum WindModelEnum [] = {
-        {"subgrid", WIND_SUBGRID}, /* the vanilla model of SH03, in which winds are included by returning energy to the star forming regions. This cools away and is ineffective.*/
+        {"subgrid", WIND_SUBGRID}, /* If this is true, winds are spawned from the star forming gas.
+                                      If false, they are spawned from neighbours of the star particle.*/
         {"decouple", WIND_DECOUPLE_SPH}, /* Specifies that wind particles are created temporarily decoupled from the gas dynamics */
         {"halo", WIND_USE_HALO}, /* Wind speeds depend on the halo circular velocity*/
         {"fixedefficiency", WIND_FIXED_EFFICIENCY}, /* Winds have a fixed efficiency and thus fixed wind speed*/

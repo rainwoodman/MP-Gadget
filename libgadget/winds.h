@@ -10,12 +10,12 @@
  * SH03, VS08 and OFJT10 are supported.
  * */
 enum WindModel {
-    WIND_SUBGRID = 1,
-    WIND_DECOUPLE_SPH = 2,
-    WIND_USE_HALO = 4,
-    WIND_FIXED_EFFICIENCY = 8,
-    /* Has no effect: only isotropic winds are implemented*/
-    WIND_ISOTROPIC = 512,
+    WIND_SUBGRID = 1,/* If this is true, winds are spawned from the star forming gas.
+                      * If false, they are spawned from neighbours of the star particle.*/
+    WIND_DECOUPLE_SPH = 2,/* Specifies that wind particles are created temporarily decoupled from the gas dynamics */
+    WIND_USE_HALO = 4,/* Wind speeds depend on the halo circular velocity*/
+    WIND_FIXED_EFFICIENCY = 8, /* Winds have a fixed efficiency and thus fixed wind speed*/
+    WIND_ISOTROPIC = 512, /* Has no effect: only isotropic winds are implemented*/
 };
 
 /*Set the parameters of the wind model*/
