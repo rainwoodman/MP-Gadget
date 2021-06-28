@@ -655,15 +655,14 @@ sfr_wind_feedback_ngbiter(TreeWalkQueryWind * I,
 }
 
 int
-winds_make_after_sf(int i, double sm, double atime)
+winds_make_after_sf(int i, double sm, double vdisp, double atime)
 {
     if(!HAS(wind_params.WindModel, WIND_SUBGRID))
         return 0;
 
     /* Get the velocity, thermal energy and efficiency of the kick*/
     double utherm = 0, vel=0, windeff = 0;
-    /* FIXME: Add Vdisp here*/
-    get_wind_params(&vel, &windeff, &utherm, 100, atime);
+    get_wind_params(&vel, &windeff, &utherm, vdisp, atime);
 
     /* Here comes the Springel Hernquist 03 wind model */
     /* Notice that this is the mass of the gas particle after forking a star, Mass - Mass/GENERATIONS.*/

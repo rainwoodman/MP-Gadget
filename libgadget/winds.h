@@ -31,7 +31,7 @@ void winds_evolve(int i, double a3inv, double hubble);
 void winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const double hubble, ForceTree * tree);
 
 /*Make a wind particle at the site of recent star formation.*/
-int winds_make_after_sf(int i, double sm, double atime);
+int winds_make_after_sf(int i, double sm, double vdisp, double atime);
 
 /*Tests whether a given particle has been made a wind particle and is hydrodynamically decoupled*/
 int winds_is_particle_decoupled(int i);

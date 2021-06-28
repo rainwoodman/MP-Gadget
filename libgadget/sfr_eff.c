@@ -99,7 +99,7 @@ static void cooling_direct(int i, const double a3inv, const double hubble, const
 static void cooling_relaxed(int i, double dtime, const double a3inv, struct sfr_eeqos_data sfr_data, const struct UVBG * const GlobalUVBG);
 
 static int make_particle_star(int child, int parent, int placement);
-static int starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG);
+static int starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, MyFloat * Vdisp, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG);
 static int quicklyastarformation(int i, const double a3inv);
 static double get_sfr_factor_due_to_selfgravity(int i);
 static double get_sfr_factor_due_to_h2(int i, MyFloat * GradRho);
@@ -208,7 +208,7 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
                     newstar = p_i;
                     sum_sm += P[i].Mass;
                 } else {
-                    newstar = starformation(p_i, &localsfr, &sum_sm, GradRho, a3inv, hubble, &GlobalUVBG);
+                    newstar = starformation(p_i, &localsfr, &sum_sm, GradRho, NULL, a3inv, hubble, &GlobalUVBG);
                 }
                 /*Add this particle to the stellar conversion queue if necessary.*/
                 if(newstar >= 0) {
@@ -602,7 +602,7 @@ quicklyastarformation(int i, const double a3inv)
  * The star slot is not actually created here, but a particle for it is.
  */
 static int
-starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG)
+starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, MyFloat * Vdisp, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG)
 {
     /*  the proper time-step */
     double dloga = get_dloga_for_bin(P[i].TimeBin, P[i].Ti_drift);
@@ -650,7 +650,7 @@ starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, const
     if(!form_star || newstar != i) {
         SPHP(i).Metallicity += (1-w) * METAL_YIELD * frac / sfr_params.Generations;
         if(All.WindOn) {
-            winds_make_after_sf(i, sm, All.Time);
+            winds_make_after_sf(i, sm, Vdisp ? Vdisp[P[i].PI] : 0, All.Time);
         }
     }
     return newstar;
