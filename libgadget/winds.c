@@ -241,19 +241,10 @@ int cmp_by_part_id(const void * a, const void * b)
 #define WIND_GET_PRIV(tw) ((struct WindPriv *) (tw->priv))
 #define WINDP(i, wind) wind[P[i].PI]
 
-/*Do a treewalk for the wind model. This only changes newly created star particles.*/
-void
-winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const double hubble, ForceTree * tree)
+/* Find the 1D DM velocity dispersion of the winds by running a density loop.*/
+static void
+winds_find_weights(TreeWalk * tw, struct WindPriv * priv, int * NewStars, int NumNewStars, const double Time, const double hubble, ForceTree * tree)
 {
-    /*The subgrid model does nothing here*/
-    if(HAS(wind_params.WindModel, WIND_SUBGRID))
-        return;
-
-    if(!MPIU_Any(NumNewStars > 0, MPI_COMM_WORLD))
-        return;
-
-    TreeWalk tw[1] = {{0}};
-
     tw->ev_label = "WIND_WEIGHT";
     tw->fill = (TreeWalkFillQueryFunction) sfr_wind_copy;
     tw->reduce = (TreeWalkReduceResultFunction) sfr_wind_reduce_weight;
@@ -268,7 +259,7 @@ winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const dou
     tw->haswork = NULL;
     tw->visit = (TreeWalkVisitFunction) treewalk_visit_nolist_ngbiter;
     tw->postprocess = (TreeWalkProcessFunction) sfr_wind_weight_postprocess;
-    struct WindPriv priv[1];
+
     priv[0].Time = Time;
     priv[0].hubble = hubble;
     tw->priv = priv;
@@ -293,6 +284,23 @@ winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const dou
 
     /* Find densities*/
     treewalk_do_hsml_loop(tw, NewStars, NumNewStars, 1);
+}
+
+/*Do a treewalk for the wind model. This only changes newly created star particles.*/
+void
+winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const double hubble, ForceTree * tree)
+{
+    /*The subgrid model does nothing here*/
+    if(HAS(wind_params.WindModel, WIND_SUBGRID))
+        return;
+
+    if(!MPIU_Any(NumNewStars > 0, MPI_COMM_WORLD))
+        return;
+
+    TreeWalk tw[1] = {{0}};
+    struct WindPriv priv[1];
+    int i;
+    winds_find_weights(tw, priv, NewStars, NumNewStars, Time, hubble, tree);
 
     for (i = 1; i < omp_get_max_threads(); i++)
         priv->nvisited[0] += priv->nvisited[i];
