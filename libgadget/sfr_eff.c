@@ -99,7 +99,7 @@ static void cooling_direct(int i, const double a3inv, const double hubble, const
 static void cooling_relaxed(int i, double dtime, const double a3inv, struct sfr_eeqos_data sfr_data, const struct UVBG * const GlobalUVBG);
 
 static int make_particle_star(int child, int parent, int placement);
-static int starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, MyFloat * Vdisp, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG);
+static int starformation(int i, double *localsfr, MyFloat * sm_out, MyFloat * GradRho, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG);
 static int quicklyastarformation(int i, const double a3inv);
 static double get_sfr_factor_due_to_selfgravity(int i);
 static double get_sfr_factor_due_to_h2(int i, MyFloat * GradRho);
@@ -152,10 +152,15 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     /*This is a queue for the new stars and their parents, so we can reallocate the slots after the main cooling loop.*/
     int * NewStars = NULL;
     int * NewParents = NULL;
-    int NumNewStar = 0;
+    size_t NumNewStar = 0, NumMaybeWind = 0;
+    int * MaybeWind = NULL;
+    MyFloat * StellarMass = NULL;
+
     size_t *nqthrsfr = ta_malloc("nqthrsfr", size_t, nthreads);
     int **thrqueuesfr = ta_malloc("thrqueuesfr", int *, nthreads);
     int **thrqueueparent = ta_malloc("thrqueueparent", int *, nthreads);
+    size_t *nqthrwind;
+    int **thrqueuewind;
 
     /*Need to capture this so that when NumActiveParticle increases during the loop
      * we don't add extra loop iterations on particles with invalid slots.*/
@@ -168,6 +173,14 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
         gadget_setup_thread_arrays(NewStars, thrqueuesfr, nqthrsfr, nactive, nthreads);
         NewParents = mymalloc2("NewParents", nactive * sizeof(int) * nthreads);
         gadget_setup_thread_arrays(NewParents, thrqueueparent, nqthrsfr, nactive, nthreads);
+    }
+
+    if(All.WindOn & winds_are_subgrid()) {
+        nqthrwind = ta_malloc("nqthrwind", size_t, nthreads);
+        thrqueuewind = ta_malloc("thrqueuewind", int *, nthreads);
+        StellarMass = mymalloc("StellarMass", SlotsManager->info[0].size * sizeof(MyFloat));
+        MaybeWind = mymalloc("MaybeWind", nactive * sizeof(int) * nthreads);
+        gadget_setup_thread_arrays(MaybeWind, thrqueuewind, nqthrwind, nactive, nthreads);
     }
 
     /* Get the global UVBG for this redshift. */
@@ -203,18 +216,26 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
 
             if(shall_we_star_form) {
                 int newstar = -1;
+                MyFloat sm;
                 if(sfr_params.QuickLymanAlphaProbability > 0) {
                     /*New star is always the same particle as the parent for quicklya*/
                     newstar = p_i;
-                    sum_sm += P[i].Mass;
+                    sum_sm += P[p_i].Mass;
                 } else {
-                    newstar = starformation(p_i, &localsfr, &sum_sm, GradRho, NULL, a3inv, hubble, &GlobalUVBG);
+                    newstar = starformation(p_i, &localsfr, &sm, GradRho, a3inv, hubble, &GlobalUVBG);
+                    sum_sm += P[p_i].Mass * (1 - exp(-sm/P[p_i].Mass));
                 }
                 /*Add this particle to the stellar conversion queue if necessary.*/
                 if(newstar >= 0) {
                     thrqueuesfr[tid][nqthrsfr[tid]] = newstar;
                     thrqueueparent[tid][nqthrsfr[tid]] = p_i;
                     nqthrsfr[tid]++;
+                }
+                /* Add this particle to the queue for consideration to spawn a wind. */
+                if(winds_are_subgrid() && newstar < 0) {
+                    thrqueuewind[tid][nqthrwind[tid]] = p_i;
+                    StellarMass[P[p_i].PI] = sm;
+                    nqthrwind[tid]++;
                 }
             }
             else
@@ -223,6 +244,17 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     }
 
     report_memory_usage("SFR");
+
+    /* Do subgrid winds*/
+    if(All.WindOn && winds_are_subgrid()) {
+        NumMaybeWind = gadget_compact_thread_arrays(MaybeWind, thrqueuewind, nqthrwind, nthreads);
+        winds_subgrid(MaybeWind, NumMaybeWind, All.Time, hubble, tree, StellarMass);
+        myfree(MaybeWind);
+        myfree(StellarMass);
+        ta_free(thrqueuewind);
+        ta_free(nqthrwind);
+    }
+
     /*Merge step for the queue.*/
     if(NewStars) {
         NumNewStar = gadget_compact_thread_arrays(NewStars, thrqueuesfr, nqthrsfr, nthreads);
@@ -238,6 +270,9 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     ta_free(nqthrsfr);
 
     walltime_measure("/Cooling/Cooling");
+
+    if(!All.StarformationOn)
+        return;
 
     /*Get some empty slots for the stars*/
     int firststarslot = SlotsManager->info[4].size;
@@ -267,9 +302,6 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
         else
             stars_spawned++;
     }
-
-    if(!All.StarformationOn)
-        return;
 
     /*Done with the parents*/
     myfree(NewParents);
@@ -311,7 +343,7 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     walltime_measure("/Cooling/StarFormation");
 
     /* Now apply the wind model using the list of new stars.*/
-    if(All.WindOn)
+    if(All.WindOn && !winds_are_subgrid())
         winds_and_feedback(NewStars, NumNewStar, All.Time, hubble, tree);
 
     myfree(NewStars);
@@ -602,7 +634,7 @@ quicklyastarformation(int i, const double a3inv)
  * The star slot is not actually created here, but a particle for it is.
  */
 static int
-starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, MyFloat * Vdisp, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG)
+starformation(int i, double *localsfr, MyFloat * sm_out, MyFloat * GradRho, const double a3inv, const double hubble, const struct UVBG * const GlobalUVBG)
 {
     /*  the proper time-step */
     double dloga = get_dloga_for_bin(P[i].TimeBin, P[i].Ti_drift);
@@ -615,12 +647,12 @@ starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, MyFlo
 
     double sm = smr * dtime;
 
+    *sm_out = sm;
     double p = sm / P[i].Mass;
 
     /* convert to Solar per Year.*/
     SPHP(i).Sfr = smr * (All.UnitMass_in_g / SOLAR_MASS) / (All.UnitTime_in_s / SEC_PER_YEAR);
     SPHP(i).Ne = sfr_data.ne;
-    *sum_sm += P[i].Mass * (1 - exp(-p));
     *localsfr += SPHP(i).Sfr;
 
     const double w = get_random_number(P[i].ID);
@@ -649,9 +681,6 @@ starformation(int i, double *localsfr, double * sum_sm, MyFloat * GradRho, MyFlo
      * that formed it if it is still around*/
     if(!form_star || newstar != i) {
         SPHP(i).Metallicity += (1-w) * METAL_YIELD * frac / sfr_params.Generations;
-        if(All.WindOn) {
-            winds_make_after_sf(i, sm, Vdisp ? Vdisp[P[i].PI] : 0, All.Time);
-        }
     }
     return newstar;
 }

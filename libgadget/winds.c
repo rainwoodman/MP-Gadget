@@ -112,6 +112,15 @@ init_winds(double FactorSN, double EgySpecSN, double PhysDensThresh, double Unit
 }
 
 int
+winds_are_subgrid(void)
+{
+    if(HAS(wind_params.WindModel, WIND_SUBGRID))
+        return 1;
+    else
+        return 0;
+}
+
+int
 winds_is_particle_decoupled(int i)
 {
     if(HAS(wind_params.WindModel, WIND_DECOUPLE_SPH)
@@ -303,9 +312,8 @@ winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double
     for(n = 0; n < NumMaybeWind; n++)
     {
         int i = MaybeWind ? MaybeWind[n] : n;
-        /* Notice that StellarMasses is indexed like n, not i!
-         * This is because it comes from same code that builds the wind queue */
-        MyFloat sm = StellarMasses[n];
+        /* Notice that StellarMasses is indexed like PI, not i!*/
+        MyFloat sm = StellarMasses[P[i].PI];
         winds_make_after_sf(i, sm, WINDP(i, priv->Winddata).Vdisp, Time);
     }
     myfree(priv->Winddata);
