@@ -439,8 +439,6 @@ effdmradius(int place, int i, TreeWalk * tw)
 static void
 sfr_wind_weight_postprocess(const int i, TreeWalk * tw)
 {
-    if(P[i].Type != 4)
-        endrun(23, "Wind called on something not a star particle: (i=%d, t=%d, id = %ld)\n", i, P[i].Type, P[i].ID);
     struct winddata * Windd = WIND_GET_PRIV(tw)->Winddata;
 
     const int maxcmpt = WINDP(i, Windd).maxcmpte;
