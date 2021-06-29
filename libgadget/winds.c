@@ -309,6 +309,7 @@ winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double
     struct WindPriv priv[1];
     int n;
     winds_find_weights(tw, priv, MaybeWind, NumMaybeWind, Time, hubble, tree);
+    myfree(priv->nvisited);
     for(n = 0; n < NumMaybeWind; n++)
     {
         int i = MaybeWind ? MaybeWind[n] : n;
