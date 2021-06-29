@@ -216,11 +216,12 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
 
             if(shall_we_star_form) {
                 int newstar = -1;
-                MyFloat sm;
+                MyFloat sm = 0;
                 if(sfr_params.QuickLymanAlphaProbability > 0) {
                     /*New star is always the same particle as the parent for quicklya*/
                     newstar = p_i;
                     sum_sm += P[p_i].Mass;
+                    sm = P[p_i].Mass;
                 } else {
                     newstar = starformation(p_i, &localsfr, &sm, GradRho, a3inv, hubble, &GlobalUVBG);
                     sum_sm += P[p_i].Mass * (1 - exp(-sm/P[p_i].Mass));
@@ -232,7 +233,7 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
                     nqthrsfr[tid]++;
                 }
                 /* Add this particle to the queue for consideration to spawn a wind. */
-                if(winds_are_subgrid() && newstar < 0) {
+                if(All.WindOn && winds_are_subgrid() && newstar < 0) {
                     thrqueuewind[tid][nqthrwind[tid]] = p_i;
                     StellarMass[P[p_i].PI] = sm;
                     nqthrwind[tid]++;
