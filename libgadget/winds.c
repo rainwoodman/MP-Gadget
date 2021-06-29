@@ -325,6 +325,7 @@ winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double
         winds_make_after_sf(i, sm, WINDP(i, priv->Winddata).Vdisp, Time);
     }
     myfree(priv->Winddata);
+    walltime_measure("/Cooling/Wind");
 }
 
 /*Do a treewalk for the wind model. This only changes newly created star particles.*/

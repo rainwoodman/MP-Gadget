@@ -246,6 +246,8 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
 
     report_memory_usage("SFR");
 
+    walltime_measure("/Cooling/Cooling");
+
     /* Do subgrid winds*/
     if(All.WindOn && winds_are_subgrid()) {
         NumMaybeWind = gadget_compact_thread_arrays(MaybeWind, thrqueuewind, nqthrwind, nthreads);
@@ -270,7 +272,6 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     ta_free(thrqueuesfr);
     ta_free(nqthrsfr);
 
-    walltime_measure("/Cooling/Cooling");
 
     if(!All.StarformationOn)
         return;
