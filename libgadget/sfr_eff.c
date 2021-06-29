@@ -159,8 +159,8 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     size_t *nqthrsfr = ta_malloc("nqthrsfr", size_t, nthreads);
     int **thrqueuesfr = ta_malloc("thrqueuesfr", int *, nthreads);
     int **thrqueueparent = ta_malloc("thrqueueparent", int *, nthreads);
-    size_t *nqthrwind;
-    int **thrqueuewind;
+    size_t *nqthrwind = NULL;
+    int **thrqueuewind = NULL;
 
     /*Need to capture this so that when NumActiveParticle increases during the loop
      * we don't add extra loop iterations on particles with invalid slots.*/
