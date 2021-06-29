@@ -33,6 +33,9 @@ void winds_and_feedback(int * NewStars, int NumNewStars, const double Time, cons
 /*Make a wind particle at the site of recent star formation.*/
 int winds_make_after_sf(int i, double sm, double vdisp, double atime);
 
+/* Make winds for the subgrid model, after computing the velocity dispersion. */
+void winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double hubble, ForceTree * tree, MyFloat * StellarMasses);
+
 /*Tests whether a given particle has been made a wind particle and is hydrodynamically decoupled*/
 int winds_is_particle_decoupled(int i);
 

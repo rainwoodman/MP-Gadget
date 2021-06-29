@@ -291,6 +291,26 @@ winds_find_weights(TreeWalk * tw, struct WindPriv * priv, int * NewStars, int Nu
     treewalk_do_hsml_loop(tw, NewStars, NumNewStars, 1);
 }
 
+/* This function spawns winds for the subgrid model, which comes from the star-forming gas.
+ * Does a little more calculation than is really necessary, due to shared code, but that shouldn't matter. */
+void
+winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double hubble, ForceTree * tree, MyFloat * StellarMasses)
+{
+    TreeWalk tw[1] = {{0}};
+    struct WindPriv priv[1];
+    int n;
+    winds_find_weights(tw, priv, MaybeWind, NumMaybeWind, Time, hubble, tree);
+    for(n = 0; n < NumMaybeWind; n++)
+    {
+        int i = MaybeWind ? MaybeWind[n] : n;
+        /* Notice that StellarMasses is indexed like n, not i!
+         * This is because it comes from same code that builds the wind queue */
+        MyFloat sm = StellarMasses[n];
+        winds_make_after_sf(i, sm, WINDP(i, priv->Winddata).Vdisp, Time);
+    }
+    myfree(priv->Winddata);
+}
+
 /*Do a treewalk for the wind model. This only changes newly created star particles.*/
 void
 winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const double hubble, ForceTree * tree)
