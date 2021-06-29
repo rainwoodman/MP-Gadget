@@ -266,7 +266,12 @@ winds_find_weights(TreeWalk * tw, struct WindPriv * priv, int * NewStars, int Nu
 
     int64_t totalleft = 0;
     sumup_large_ints(1, &NumNewStars, &totalleft);
-    priv->Winddata = (struct winddata * ) mymalloc("WindExtraData", SlotsManager->info[4].size * sizeof(struct winddata));
+    /* Subgrid winds come from gas, regular wind from stars: size array accordingly.*/
+    int64_t winddata_sz = SlotsManager->info[4].size;
+    if(HAS(wind_params.WindModel, WIND_SUBGRID))
+        winddata_sz = SlotsManager->info[0].size;
+    priv->Winddata = (struct winddata * ) mymalloc("WindExtraData", winddata_sz * sizeof(struct winddata));
+
     /* Note that this will be an over-count because each loop will add more.*/
     priv->nvisited = ta_malloc("nvisited", int, omp_get_max_threads());
     memset(WIND_GET_PRIV(tw)->nvisited, 0, omp_get_max_threads()* sizeof(int));
@@ -275,7 +280,7 @@ winds_find_weights(TreeWalk * tw, struct WindPriv * priv, int * NewStars, int Nu
     /*Initialise the WINDP array*/
     #pragma omp parallel for
     for (i = 0; i < NumNewStars; i++) {
-        int n = NewStars[i];
+        int n = NewStars ? NewStars[i] : i;
         WINDP(n, priv->Winddata).DMRadius = 2 * P[n].Hsml;
         WINDP(n, priv->Winddata).Left = 0;
         WINDP(n, priv->Winddata).Right = tree->BoxSize;
