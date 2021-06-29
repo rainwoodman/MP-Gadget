@@ -305,6 +305,13 @@ winds_find_weights(TreeWalk * tw, struct WindPriv * priv, int * NewStars, int Nu
 void
 winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double hubble, ForceTree * tree, MyFloat * StellarMasses)
 {
+    /*The non-subgrid model does nothing here*/
+    if(!HAS(wind_params.WindModel, WIND_SUBGRID))
+        return;
+
+    if(!MPIU_Any(NumMaybeWind > 0, MPI_COMM_WORLD))
+        return;
+
     TreeWalk tw[1] = {{0}};
     struct WindPriv priv[1];
     int n;
