@@ -152,7 +152,7 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     /*This is a queue for the new stars and their parents, so we can reallocate the slots after the main cooling loop.*/
     int * NewStars = NULL;
     int * NewParents = NULL;
-    size_t NumNewStar = 0, NumMaybeWind = 0;
+    int64_t NumNewStar = 0, NumMaybeWind = 0;
     int * MaybeWind = NULL;
     MyFloat * StellarMass = NULL;
 
@@ -259,9 +259,9 @@ cooling_and_starformation(ActiveParticles * act, ForceTree * tree, MyFloat * Gra
     /*Merge step for the queue.*/
     if(NewStars) {
         NumNewStar = gadget_compact_thread_arrays(NewStars, thrqueuesfr, nqthrsfr, nthreads);
-        int NumNewParent = gadget_compact_thread_arrays(NewParents, thrqueueparent, nqthrsfr, nthreads);
+        int64_t NumNewParent = gadget_compact_thread_arrays(NewParents, thrqueueparent, nqthrsfr, nthreads);
         if(NumNewStar != NumNewParent)
-            endrun(3,"%d new stars, but %d new parents!\n",NumNewStar, NumNewParent);
+            endrun(3,"%lu new stars, but %lu new parents!\n",NumNewStar, NumNewParent);
         /*Shrink star memory as we keep it for the wind model*/
         NewStars = myrealloc(NewStars, sizeof(int) * NumNewStar);
     }
