@@ -629,12 +629,14 @@ get_wind_dir(int i, double dir[3]) {
 static void
 get_wind_params(double * vel, double * windeff, double * utherm, const double vdisp, const double time)
 {
-    *utherm = wind_params.WindThermalFactor * 1.5 * vdisp * vdisp;
+    /* Physical velocity*/
+    double vphys = vdisp / time;
+    *utherm = wind_params.WindThermalFactor * 1.5 * vphys * vphys;
     if(HAS(wind_params.WindModel, WIND_FIXED_EFFICIENCY)) {
         *windeff = wind_params.WindEfficiency;
         *vel = wind_params.WindSpeed * time;
     } else if(HAS(wind_params.WindModel, WIND_USE_HALO)) {
-        *windeff = 1.0 / (pow(vdisp / time / wind_params.WindSigma0,2));
+        *windeff = pow(wind_params.WindSigma0, 2) / (vphys * vphys + 2 * (*utherm));
         *vel = wind_params.WindSpeedFactor * vdisp;
     } else {
         endrun(1, "WindModel = 0x%X is strange. This shall not happen.\n", wind_params.WindModel);
