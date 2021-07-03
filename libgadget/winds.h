@@ -10,12 +10,12 @@
  * SH03, VS08 and OFJT10 are supported.
  * */
 enum WindModel {
-    WIND_SUBGRID = 1,
-    WIND_DECOUPLE_SPH = 2,
-    WIND_USE_HALO = 4,
-    WIND_FIXED_EFFICIENCY = 8,
-    /* Has no effect: only isotropic winds are implemented*/
-    WIND_ISOTROPIC = 512,
+    WIND_SUBGRID = 1,/* If this is true, winds are spawned from the star forming gas.
+                      * If false, they are spawned from neighbours of the star particle.*/
+    WIND_DECOUPLE_SPH = 2,/* Specifies that wind particles are created temporarily decoupled from the gas dynamics */
+    WIND_USE_HALO = 4,/* Wind speeds depend on the halo circular velocity*/
+    WIND_FIXED_EFFICIENCY = 8, /* Winds have a fixed efficiency and thus fixed wind speed*/
+    WIND_ISOTROPIC = 512, /* Has no effect: only isotropic winds are implemented*/
 };
 
 /*Set the parameters of the wind model*/
@@ -31,7 +31,13 @@ void winds_evolve(int i, double a3inv, double hubble);
 void winds_and_feedback(int * NewStars, int NumNewStars, const double Time, const double hubble, ForceTree * tree);
 
 /*Make a wind particle at the site of recent star formation.*/
-int winds_make_after_sf(int i, double sm, double atime);
+int winds_make_after_sf(int i, double sm, double vdisp, double atime);
+
+/* Make winds for the subgrid model, after computing the velocity dispersion. */
+void winds_subgrid(int * MaybeWind, int NumMaybeWind, const double Time, const double hubble, ForceTree * tree, MyFloat * StellarMasses);
+
+/* Tests whether winds spawn from gas or stars*/
+int winds_are_subgrid(void);
 
 /*Tests whether a given particle has been made a wind particle and is hydrodynamically decoupled*/
 int winds_is_particle_decoupled(int i);
