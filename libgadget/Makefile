@@ -69,7 +69,7 @@ TESTED = hci \
 	gravity \
 	exchange
 
-MPI_TESTED = exchange
+MPI_TESTED = exchange fof
 
 TESTBIN :=$(UTILS_TESTED:%=.objs/utils/test_%) $(UTILS_MPI_TESTED:%=.objs/utils/test_%) $(TESTED:%=.objs/test_%) $(MPI_TESTED:%=.objs/test_%)
 SUITE?= $(TESTED:%=test_%) $(UTILS_TESTED:%=utils/test_%)
@@ -152,6 +152,9 @@ all: libgadget.a libgadget-utils.a
 	$(MPICC) $(TCFLAGS) -I../tests/ $^ $(LIBS) -o $@
 
 .objs/test_gravity: tests/test_gravity.c libgadget.a ../tests/stub.c ../tests/cmocka.c libgadget-utils.a
+	$(MPICC) $(TCFLAGS) -I../tests/ $^ $(LIBS) -o $@
+
+.objs/test_fof: tests/test_fof.c libgadget.a ../tests/stub.c ../tests/cmocka.c libgadget-utils.a
 	$(MPICC) $(TCFLAGS) -I../tests/ $^ $(LIBS) -o $@
 
 build-tests: $(TESTBIN)
